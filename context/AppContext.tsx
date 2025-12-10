@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Subject, Task, ScheduleItem, Reminder, AppNotification, Habit, User, Achievement, Note, Flashcard } from '../types';
+import { Subject, Task, ScheduleItem, Reminder, AppNotification, Habit, User, Achievement, Note, Flashcard, SavingsGoal } from '../types';
 import { generateStudyPlan } from '../services/gemini';
 
 interface AppContextType {
@@ -37,6 +37,10 @@ interface AppContextType {
   addHabit: (name: string) => void;
   toggleHabit: (id: string) => void;
   deleteHabit: (id: string) => void;
+  savingsGoals: SavingsGoal[];
+  addSavingsGoal: (goal: SavingsGoal) => void;
+  updateSavingsGoal: (id: string, amount: number) => void;
+  deleteSavingsGoal: (id: string) => void;
   // Vault
   notes: Note[];
   addNote: (title: string, content: string) => void;
@@ -66,6 +70,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     // Merge with default gamification structure if missing
     setUserState({
+      id: userData.id || Date.now().toString(),
       name: userData.name,
       email: userData.email,
       university: userData.university || 'Tech Institute',
@@ -75,6 +80,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       level: userData.level || 1,
       achievements: userData.achievements || INITIAL_ACHIEVEMENTS,
       bio: userData.bio || 'Engineering student trying to survive.',
+      avatar: userData.avatar || `https://ui-avatars.com/api/?name=${userData.name}&background=random`,
+      joinedDate: userData.joinedDate || new Date().toLocaleDateString(),
+      security: userData.security || { twoFactorEnabled: false, lastLogin: new Date().toISOString() }
     });
   };
 
@@ -140,6 +148,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     { id: '2', name: 'Solve 1 LeetCode', streak: 12, completedToday: true },
     { id: '3', name: 'Read 20 mins', streak: 0, completedToday: false },
   ]);
+  const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([
+    { id: '1', name: 'New Laptop', targetAmount: 60000, currentAmount: 15000, color: 'bg-blue-500', icon: 'Laptop' },
+    { id: '2', name: 'Semester Trip', targetAmount: 5000, currentAmount: 2000, color: 'bg-emerald-500', icon: 'Plane' }
+  ]);
 
   // Knowledge Vault (Notes)
   const [notes, setNotes] = useState<Note[]>([]);
@@ -150,12 +162,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (storedUser) {
         // Parse and ensure structure
         const parsed = JSON.parse(storedUser);
-        setUser({ 
-            ...parsed, 
-            xp: parsed.xp || 0, 
-            level: parsed.level || 1, 
-            achievements: parsed.achievements || INITIAL_ACHIEVEMENTS 
-        });
+        setUser(parsed);
     }
 
     const storedNotes = localStorage.getItem('engiLife_notes');
@@ -339,7 +346,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setNotifications([]);
   };
 
-  // Actions - Habits
+  // Actions - Habits & Savings
   const addHabit = (name: string) => {
     setHabits(prev => [...prev, {
       id: Date.now().toString(),
@@ -358,7 +365,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return {
           ...h,
           completedToday: !wasCompleted,
-          streak: wasCompleted ? h.streak : h.streak + 1, // Simple streak logic, usually would act on date diff
+          streak: wasCompleted ? h.streak : h.streak + 1, // Simple streak logic
           lastCompletedDate: !wasCompleted ? today : h.lastCompletedDate
         };
       }
@@ -368,6 +375,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteHabit = (id: string) => {
     setHabits(prev => prev.filter(h => h.id !== id));
+  };
+
+  const addSavingsGoal = (goal: SavingsGoal) => {
+    setSavingsGoals(prev => [...prev, goal]);
+  };
+
+  const updateSavingsGoal = (id: string, amount: number) => {
+    setSavingsGoals(prev => prev.map(g => g.id === id ? { ...g, currentAmount: amount } : g));
+  };
+
+  const deleteSavingsGoal = (id: string) => {
+    setSavingsGoals(prev => prev.filter(g => g.id !== id));
   };
 
   // Actions - Notes
@@ -400,6 +419,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       reminders, addReminder, deleteReminder, toggleReminder,
       notifications, markNotificationRead, clearNotifications,
       budgetLimit, setBudgetLimit, habits, addHabit, toggleHabit, deleteHabit,
+      savingsGoals, addSavingsGoal, updateSavingsGoal, deleteSavingsGoal,
       notes, addNote, updateNote, deleteNote, awardXP
     }}>
       {children}

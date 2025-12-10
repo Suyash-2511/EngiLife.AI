@@ -8,7 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <script>
       tailwind.config = {
-        darkMode: 'class', // Enable class-based dark mode
+        darkMode: 'class',
         theme: {
           extend: {
             fontFamily: {
@@ -19,9 +19,9 @@
               slate: {
                 850: '#1e293b',
                 900: '#0f172a',
-                950: '#020617', // Deep void for dark mode
+                950: '#020617',
               },
-              // New Primary: Violet
+              // Primary: Violet
               primary: {
                 50: '#f5f3ff',
                 100: '#ede9fe',
@@ -33,11 +33,30 @@
                 700: '#6d28d9',
                 800: '#5b21b6',
                 900: '#4c1d95',
+              },
+              // Secondary: Emerald
+              emerald: {
+                50: '#ecfdf5',
+                100: '#d1fae5',
+                400: '#34d399',
+                500: '#10b981',
+                600: '#059669',
               }
             },
             boxShadow: {
               'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.07)',
               'glow': '0 0 20px -5px rgba(124, 58, 237, 0.5)', // Violet glow
+            },
+            animation: {
+              'pulse-slow': 'pulse 8s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'float': 'float 20s ease-in-out infinite',
+              'float-delayed': 'float 25s ease-in-out infinite reverse',
+            },
+            keyframes: {
+              float: {
+                '0%, 100%': { transform: 'translate(0, 0)' },
+                '50%': { transform: 'translate(20px, -20px)' },
+              }
             }
           },
         },
@@ -53,7 +72,7 @@
       }
       
       html.dark body {
-        background-color: #020617; /* Slate 950 */
+        background-color: #0f172a;
         color: #f8fafc;
       }
 
@@ -85,7 +104,7 @@
       }
       
       html.dark .glass-panel {
-        background: rgba(15, 23, 42, 0.6); /* Darker glass for dark mode */
+        background: rgba(15, 23, 42, 0.6);
         border: 1px solid rgba(255, 255, 255, 0.1);
       }
     </style>

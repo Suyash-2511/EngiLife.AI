@@ -1,30 +1,31 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Briefcase, Sparkles, Award, MessageSquare, Mic, Map, Target, ChevronRight, CheckCircle, Send, Star } from 'lucide-react';
+import { Briefcase, Sparkles, Award, MessageSquare, Mic, Map, Target, ChevronRight, CheckCircle, Send, Star, FileText, Check, AlertTriangle, Search, Building, MapPin } from 'lucide-react';
 import { Card } from '../Shared/Card';
 import { Button } from '../Shared/Button';
-import { generateResumeTips, generateInterviewQuestion, evaluateInterviewAnswer, generateCareerRoadmap } from '../../services/gemini';
+import { analyzeResume, generateInterviewQuestion, evaluateInterviewAnswer, generateCareerRoadmap } from '../../services/gemini';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
+import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 
 // --- Sub-Component: Resume Enhancement ---
 const ResumeEnhancer = () => {
   const [skills, setSkills] = useState('');
   const [experience, setExperience] = useState('');
-  const [suggestions, setSuggestions] = useState('');
+  const [analysis, setAnalysis] = useState<{score: number, feedback: string[], keywords: string[]} | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleGenerate = async () => {
     if (!skills || !experience) return;
     setLoading(true);
     const skillList = skills.split(',').map(s => s.trim());
-    const result = await generateResumeTips(skillList, experience);
-    setSuggestions(result);
+    const result = await analyzeResume(skillList, experience);
+    setAnalysis(result);
     setLoading(false);
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-      <div className="space-y-4">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <div className="lg:col-span-5 space-y-4">
         <div>
           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Technical Skills</label>
           <input
@@ -47,24 +48,71 @@ const ResumeEnhancer = () => {
           onClick={handleGenerate}
           disabled={loading || !skills || !experience}
           className="w-full"
-          icon={loading ? <Sparkles className="animate-spin" size={18} /> : <Award size={18} />}
+          icon={loading ? <Sparkles className="animate-spin" size={18} /> : <FileText size={18} />}
         >
-          Enhance Resume
+          Analyze Resume
         </Button>
       </div>
 
-      <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-6 border border-slate-100 dark:border-slate-800 h-full">
-        <h4 className="font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-          <Briefcase size={18} className="text-primary-600" />
-          AI Suggestions
-        </h4>
-        {suggestions ? (
-          <div className="prose prose-sm dark:prose-invert">
-            <ReactMarkdown>{suggestions}</ReactMarkdown>
-          </div>
+      <div className="lg:col-span-7 bg-slate-50 dark:bg-slate-900/50 rounded-xl p-6 border border-slate-100 dark:border-slate-800 min-h-[300px]">
+        {analysis ? (
+           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="flex items-center gap-6">
+                  <div className="relative w-32 h-32">
+                     <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                           <Pie
+                              data={[{ value: analysis.score }, { value: 100 - analysis.score }]}
+                              innerRadius={25}
+                              outerRadius={40}
+                              startAngle={180}
+                              endAngle={-180}
+                              dataKey="value"
+                              stroke="none"
+                           >
+                              <Cell fill={analysis.score > 70 ? '#10b981' : '#f59e0b'} />
+                              <Cell fill="#e2e8f0" />
+                           </Pie>
+                        </PieChart>
+                     </ResponsiveContainer>
+                     <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="text-2xl font-bold text-slate-800 dark:text-white">{analysis.score}</span>
+                        <span className="text-[10px] uppercase text-slate-400">ATS Score</span>
+                     </div>
+                  </div>
+                  <div className="flex-1">
+                      <h4 className="font-bold text-lg mb-2">Resume Health</h4>
+                      <p className="text-sm text-slate-600 dark:text-slate-400">
+                          {analysis.score > 80 ? "Your resume is in great shape! Ready for top tier companies." : "Needs improvement to pass automated filters."}
+                      </p>
+                  </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
+                      <h5 className="font-semibold text-sm mb-3 text-emerald-600 flex items-center gap-2"><Check size={14}/> Key Strengths</h5>
+                      <div className="flex flex-wrap gap-2">
+                          {analysis.keywords.map((k, i) => (
+                              <span key={i} className="text-xs bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 py-1 rounded-full">{k}</span>
+                          ))}
+                      </div>
+                  </div>
+                  <div className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
+                      <h5 className="font-semibold text-sm mb-3 text-amber-600 flex items-center gap-2"><AlertTriangle size={14}/> Improvements</h5>
+                      <ul className="space-y-2">
+                          {analysis.feedback.map((f, i) => (
+                              <li key={i} className="text-xs text-slate-600 dark:text-slate-300 list-disc ml-3">{f}</li>
+                          ))}
+                      </ul>
+                  </div>
+              </div>
+           </div>
         ) : (
-          <div className="h-40 flex items-center justify-center text-slate-400 text-sm text-center">
-            Enter details to generate impact-driven bullet points.
+          <div className="h-full flex flex-col items-center justify-center text-slate-400 text-sm text-center">
+             <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-4">
+                 <Target size={32} className="opacity-30" />
+             </div>
+             <p>Enter your details to generate an ATS compatibility score and get tailored feedback.</p>
           </div>
         )}
       </div>
@@ -238,28 +286,74 @@ const CareerRoadmap = () => {
   );
 };
 
+// --- Sub-Component: Job Match ---
+const JobMatch = () => {
+    // Simulated Data
+    const jobs = [
+        { role: "Junior Frontend Dev", company: "TechCorp", match: 85, skills: ["React", "TS"] },
+        { role: "Backend Engineer", company: "DataSystems", match: 60, skills: ["Node", "SQL"] },
+        { role: "Product Intern", company: "StartUp Inc", match: 92, skills: ["Communication", "Agile"] },
+    ];
+
+    return (
+        <div className="space-y-6">
+            <div className="flex justify-between items-center">
+                <h3 className="font-bold text-lg">Matched Opportunities</h3>
+                <div className="flex gap-2 text-sm text-slate-500">
+                    <span className="flex items-center gap-1"><MapPin size={14}/> Remote / Hybrid</span>
+                </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {jobs.map((job, i) => (
+                    <motion.div 
+                      key={i}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.1 }}
+                      className="border border-slate-200 dark:border-slate-800 rounded-xl p-4 hover:border-primary-500 cursor-pointer transition-colors bg-white dark:bg-slate-900"
+                    >
+                        <div className="flex justify-between items-start mb-3">
+                            <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center">
+                                <Building size={20} className="text-slate-500"/>
+                            </div>
+                            <span className="text-xs font-bold bg-green-100 text-green-700 px-2 py-1 rounded-full">{job.match}% Match</span>
+                        </div>
+                        <h4 className="font-bold text-slate-800 dark:text-white">{job.role}</h4>
+                        <p className="text-sm text-slate-500 mb-4">{job.company}</p>
+                        <div className="flex gap-2 flex-wrap">
+                            {job.skills.map(s => <span key={s} className="text-[10px] bg-slate-50 dark:bg-slate-800 px-2 py-1 rounded text-slate-600 dark:text-slate-400">{s}</span>)}
+                        </div>
+                    </motion.div>
+                ))}
+            </div>
+        </div>
+    )
+}
+
 // --- Main Component ---
 export const ResumeBuilder: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'resume' | 'interview' | 'roadmap'>('resume');
+  const [activeTab, setActiveTab] = useState<'resume' | 'interview' | 'roadmap' | 'jobs'>('resume');
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Career Center</h1>
-         <div className="flex bg-slate-100 dark:bg-slate-800/50 p-1 rounded-xl">
-            {(['resume', 'interview', 'roadmap'] as const).map(tab => (
+         <div className="flex bg-slate-100 dark:bg-slate-800/50 p-1 rounded-xl overflow-x-auto">
+            {(['resume', 'interview', 'roadmap', 'jobs'] as const).map(tab => (
                <button
                  key={tab}
                  onClick={() => setActiveTab(tab)}
-                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
                     activeTab === tab 
                     ? 'bg-white dark:bg-slate-800 text-primary-600 dark:text-primary-400 shadow-sm' 
                     : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
                  }`}
                >
-                 {tab === 'resume' && 'Resume Builder'}
+                 {tab === 'resume' && 'Resume ATS'}
                  {tab === 'interview' && 'Mock Interview'}
                  {tab === 'roadmap' && 'Roadmap'}
+                 {tab === 'jobs' && 'Job Match'}
                </button>
             ))}
          </div>
@@ -278,6 +372,7 @@ export const ResumeBuilder: React.FC = () => {
                   {activeTab === 'resume' && <ResumeEnhancer />}
                   {activeTab === 'interview' && <MockInterview />}
                   {activeTab === 'roadmap' && <CareerRoadmap />}
+                  {activeTab === 'jobs' && <JobMatch />}
                </motion.div>
             </AnimatePresence>
          </div>

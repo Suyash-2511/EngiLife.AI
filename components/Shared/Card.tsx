@@ -1,6 +1,5 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
 interface CardProps {
@@ -22,17 +21,16 @@ export const Card: React.FC<CardProps> = ({
 }) => {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay: delay, ease: [0.22, 1, 0.36, 1] }}
-      whileHover={{ y: -4, boxShadow: "0 10px 30px -10px rgba(0,0,0,0.2)" }}
+      transition={{ duration: 0.4, delay: delay, ease: [0.25, 0.4, 0.25, 1] }}
       className={twMerge(
-        "glass-panel rounded-2xl shadow-sm overflow-hidden transition-all duration-300 dark:shadow-none",
+        "bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-glass hover:shadow-lg transition-all duration-300 overflow-hidden backdrop-blur-sm",
         className
       )}
     >
       {(title || action) && (
-        <div className="px-6 py-5 border-b border-slate-200/50 dark:border-white/10 flex justify-between items-center bg-white/40 dark:bg-slate-900/40">
+        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-950/30">
           {title && <h3 className="font-semibold text-slate-800 dark:text-slate-100 tracking-tight">{title}</h3>}
           {action && <div className="flex items-center">{action}</div>}
         </div>

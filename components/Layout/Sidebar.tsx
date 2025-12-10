@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LayoutDashboard, BookOpen, Beaker, Heart, 
-  Briefcase, X, ClipboardCheck, Settings, LogOut, UserCircle, Archive
+  Briefcase, X, ClipboardCheck, Archive, LogOut
 } from 'lucide-react';
 import { AppRoute } from '../../types';
 import { clsx } from 'clsx';
@@ -69,7 +69,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onLogout, use
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
+          <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto custom-scrollbar">
             <p className="px-4 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 font-mono">Menu</p>
             {NAV_ITEMS.map((item) => {
               const isActive = (currentPath === item.id || (currentPath === '' && item.id === AppRoute.DASHBOARD));

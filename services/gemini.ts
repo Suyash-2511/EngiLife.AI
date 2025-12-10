@@ -43,16 +43,31 @@ export const generateStudyPlan = async (subjects: string[], pendingTasks: string
   }
 };
 
-export const explainConcept = async (query: string, branch: string): Promise<string> => {
+export const explainConcept = async (query: string, branch: string, mode: 'simple' | 'socratic' = 'simple'): Promise<string> => {
   try {
-    const prompt = `
-      You are an expert engineering tutor specialized in ${branch}.
-      Explain the following concept clearly, using analogies where appropriate.
-      Use Markdown formatting (bolding, lists, code blocks) to make it readable.
-      If it involves math, write the formula clearly.
-      Concept: "${query}"
-      Keep it concise but comprehensive (under 300 words).
-    `;
+    let prompt = '';
+    if (mode === 'socratic') {
+      prompt = `
+        Act as a Socratic tutor for ${branch} engineering. 
+        The student asks: "${query}".
+        
+        Rules:
+        1. Do NOT give the direct answer or definition immediately.
+        2. Ask a thought-provoking, guiding question to help the student derive the answer themselves.
+        3. Break down complex concepts into smaller, logical steps.
+        4. If the student's previous input suggests confusion, provide a small hint before asking the next question.
+        5. Keep responses concise, conversational, and encouraging.
+      `;
+    } else {
+      prompt = `
+        You are an expert engineering tutor specialized in ${branch}.
+        Explain the following concept clearly, using analogies where appropriate.
+        Use Markdown formatting (bolding, lists, code blocks) to make it readable.
+        If it involves math, write the formula clearly.
+        Concept: "${query}"
+        Keep it concise but comprehensive (under 300 words).
+      `;
+    }
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
@@ -74,11 +89,11 @@ export const generateLabManual = async (experimentName: string, branch: string):
       
       Structure required (Use Markdown H2 for headers):
       1. **Objective**
-      2. **Apparatus Required**
+      2. **Apparatus/Tools Required**
       3. **Theory** (Brief, include formula if needed)
       4. **Procedure** (Step-by-step numbered list)
-      5. **Safety Precautions**
-      6. **Viva Voce** (5 potential questions with short answers)
+      5. **Observation Table** (Create a markdown table template)
+      6. **Result**
       
       Format as clean Markdown.
     `;
@@ -94,27 +109,92 @@ export const generateLabManual = async (experimentName: string, branch: string):
   }
 };
 
-export const generateResumeTips = async (skills: string[], experience: string): Promise<string> => {
+export const generateVivaQuestions = async (experimentName: string, branch: string): Promise<any[]> => {
   try {
     const prompt = `
-      I am an engineering student preparing for placements.
-      My Skills: ${skills.join(', ')}
-      My Experience/Projects: ${experience}
-      
-      Generate 3 powerful bullet points for my resume based on this.
-      Also suggest 1 missing skill I should learn to be more competitive.
-      Format as Markdown.
+      Generate 5 viva voce questions and answers for the experiment: "${experimentName}" (${branch}).
+      Return JSON: [{ "question": string, "answer": string }]
     `;
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+           type: Type.ARRAY,
+           items: {
+             type: Type.OBJECT,
+             properties: {
+               question: { type: Type.STRING },
+               answer: { type: Type.STRING }
+             }
+           }
+        }
+      }
     });
-    return response.text || "No tips available.";
+    return JSON.parse(response.text || "[]");
   } catch (error) {
-    console.error("Gemini API Error:", error);
-    return "Failed to generate career advice.";
+    return [];
   }
+};
+
+export const generateCodeSnippet = async (experimentName: string): Promise<string> => {
+    try {
+        const prompt = `
+          Write the code implementation for "${experimentName}". 
+          If it's a CS experiment, provide C++/Python/Java code.
+          If it's Electronics, provide Verilog/MATLAB/Arduino code if applicable.
+          Wrap in markdown code block.
+        `;
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt
+        });
+        return response.text || "";
+    } catch (e) {
+        return "";
+    }
+}
+
+export const analyzeResume = async (skills: string[], experience: string): Promise<{score: number, feedback: string[], keywords: string[]}> => {
+  try {
+    const prompt = `
+      Analyze this engineering student resume profile.
+      Skills: ${skills.join(', ')}
+      Experience: ${experience}
+      
+      1. Give an ATS Score out of 100 based on keyword density and impact.
+      2. Provide 3 specific improvements.
+      3. List 5 missing keywords relevant to the likely role.
+      
+      Return JSON: { "score": number, "feedback": string[], "keywords": string[] }
+    `;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            score: { type: Type.INTEGER },
+            feedback: { type: Type.ARRAY, items: { type: Type.STRING } },
+            keywords: { type: Type.ARRAY, items: { type: Type.STRING } }
+          }
+        }
+      }
+    });
+    return JSON.parse(response.text || "{}");
+  } catch (error) {
+    return { score: 70, feedback: ["Add more numbers"], keywords: ["Teamwork"] };
+  }
+};
+
+export const generateResumeTips = async (skills: string[], experience: string): Promise<string> => {
+  // Keeping for backward compatibility or simpler calls
+  return "Deprecated: Use analyzeResume";
 };
 
 export const generateInterviewQuestion = async (role: string, context?: string): Promise<string> => {

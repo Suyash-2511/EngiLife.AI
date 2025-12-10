@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ChevronRight, ArrowRight, Lock, Mail, User, 
-  ScanFace, Github, Chrome, Check, ShieldCheck, GraduationCap 
+  ScanFace, Github, Chrome, Check, ShieldCheck, GraduationCap, AlertCircle, Smartphone 
 } from 'lucide-react';
 
 interface LoginProps {
-  onLogin: (user: { name: string; email: string }) => void;
+  onLogin: (user: any) => void;
 }
 
 // --- Helper: Password Strength Meter ---
@@ -104,20 +104,122 @@ const FaceIDScanner = ({ onComplete }: { onComplete: () => void }) => {
 };
 
 export const Login: React.FC<LoginProps> = ({ onLogin }) => {
-  const [mode, setMode] = useState<'login' | 'signup' | 'faceid'>('login');
+  const [mode, setMode] = useState<'login' | 'signup' | 'faceid' | 'otp'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [branch, setBranch] = useState('Computer Science');
+  const [otp, setOtp] = useState(['', '', '', '']);
+  const [enable2FA, setEnable2FA] = useState(false);
   const [loading, setLoading] = useState(false);
+  
+  // Security State
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [isLocked, setIsLocked] = useState(false);
+  const [lockoutTimer, setLockoutTimer] = useState(0);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Lockout Logic
+  useEffect(() => {
+    let timer: any;
+    if (isLocked && lockoutTimer > 0) {
+      timer = setInterval(() => setLockoutTimer(prev => prev - 1), 1000);
+    } else if (lockoutTimer === 0 && isLocked) {
+      setIsLocked(false);
+      setFailedAttempts(0);
+      setErrorMsg('');
+    }
+    return () => clearInterval(timer);
+  }, [isLocked, lockoutTimer]);
+
+  const validateEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+
+  const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLocked) return;
+
+    if (!validateEmail(email)) {
+      setErrorMsg("Invalid email format.");
+      return;
+    }
+
+    if (password.length < 6) {
+      handleFailedAttempt("Incorrect password.");
+      return;
+    }
+
+    // Simulate checks
     setLoading(true);
     setTimeout(() => {
-      onLogin({ name: name || 'Engineering Student', email });
       setLoading(false);
+      // Determine if OTP is needed. For demo, check if user "enabled" it in signup, 
+      // OR arbitrarily enforce it for the demo user if they check "Secure Login"
+      if (enable2FA) { // Reusing this state for "Is 2FA Required for this user" assumption
+        setMode('otp');
+      } else {
+        completeLogin();
+      }
+    }, 1000);
+  };
+
+  const handleSignupSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateEmail(email) || !name || password.length < 6) {
+      setErrorMsg("Please fill all fields correctly. Password must be 6+ chars.");
+      return;
+    }
+    setLoading(true);
+    setTimeout(() => {
+      setLoading(false);
+      completeLogin();
     }, 1500);
+  };
+
+  const handleFailedAttempt = (msg: string) => {
+    const attempts = failedAttempts + 1;
+    setFailedAttempts(attempts);
+    if (attempts >= 3) {
+      setIsLocked(true);
+      setLockoutTimer(30); // 30 seconds
+      setErrorMsg("Too many failed attempts. Account locked.");
+    } else {
+      setErrorMsg(`${msg} Attempts left: ${3 - attempts}`);
+    }
+  };
+
+  const handleOtpChange = (index: number, value: string) => {
+    if (value.length > 1) return;
+    const newOtp = [...otp];
+    newOtp[index] = value;
+    setOtp(newOtp);
+    
+    // Auto-focus next
+    if (value && index < 3) {
+      document.getElementById(`otp-${index+1}`)?.focus();
+    }
+  };
+
+  const verifyOtp = () => {
+    setLoading(true);
+    setTimeout(() => {
+      if (otp.join('') === '1234') {
+        completeLogin();
+      } else {
+        setLoading(false);
+        setErrorMsg("Invalid code. Try 1234.");
+        setOtp(['','','','']);
+        document.getElementById(`otp-0`)?.focus();
+      }
+    }, 1000);
+  };
+
+  const completeLogin = () => {
+    onLogin({ 
+      name: name || 'Engineering Student', 
+      email,
+      branch,
+      security: { twoFactorEnabled: enable2FA, lastLogin: new Date().toISOString() }
+    });
   };
 
   const startFaceID = () => {
@@ -125,7 +227,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
   };
 
   return (
-    <div className="min-h-screen w-full flex bg-transparent"> {/* Made transparent */}
+    <div className="min-h-screen w-full flex bg-transparent">
       {/* Visual Side (Left) - Glass Panel */}
       <div className="hidden lg:flex w-1/2 relative overflow-hidden items-center justify-center p-12">
         <div className="relative z-20 max-w-lg text-slate-800 dark:text-white">
@@ -182,6 +284,45 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   Cancel and use password
                 </button>
               </motion.div>
+            ) : mode === 'otp' ? (
+              <motion.div 
+                key="otp"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="text-center"
+              >
+                <div className="w-16 h-16 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center mx-auto mb-6 text-primary-600">
+                   <Smartphone size={32} />
+                </div>
+                <h3 className="text-2xl font-bold mb-2 text-slate-900 dark:text-white">Two-Factor Auth</h3>
+                <p className="text-slate-500 mb-8 text-sm">Enter the code sent to your email (Demo: 1234)</p>
+                
+                <div className="flex justify-center gap-3 mb-8">
+                   {otp.map((digit, i) => (
+                      <input 
+                        key={i}
+                        id={`otp-${i}`}
+                        type="text" 
+                        maxLength={1}
+                        value={digit}
+                        onChange={(e) => handleOtpChange(i, e.target.value)}
+                        className="w-12 h-12 text-center text-xl font-bold border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 focus:ring-2 focus:ring-primary-500/50 outline-none dark:text-white"
+                      />
+                   ))}
+                </div>
+                
+                {errorMsg && <p className="text-red-500 text-sm mb-4 animate-shake">{errorMsg}</p>}
+
+                <button 
+                   onClick={verifyOtp}
+                   disabled={loading || otp.join('').length !== 4}
+                   className="w-full py-3.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                >
+                   {loading ? "Verifying..." : "Verify Login"}
+                </button>
+                <button onClick={() => setMode('login')} className="mt-4 text-sm text-slate-500 hover:text-slate-700">Back to Login</button>
+              </motion.div>
             ) : (
               <motion.div
                 key="form"
@@ -199,131 +340,152 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   </p>
                 </div>
 
-                {/* Social Login */}
-                <div className="grid grid-cols-2 gap-3 mb-8">
-                  <button className="flex items-center justify-center gap-2 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors dark:text-white shadow-sm">
-                    <Chrome size={20} className="text-slate-900 dark:text-white" /> 
-                    <span className="text-sm font-medium">Google</span>
-                  </button>
-                  <button className="flex items-center justify-center gap-2 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors dark:text-white shadow-sm">
-                    <Github size={20} className="text-slate-900 dark:text-white" /> 
-                    <span className="text-sm font-medium">GitHub</span>
-                  </button>
-                </div>
+                {isLocked ? (
+                   <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 rounded-xl flex items-center gap-3 text-red-600 dark:text-red-400 mb-6">
+                      <AlertCircle size={24} />
+                      <div>
+                         <p className="font-bold">Account Locked</p>
+                         <p className="text-sm">Try again in {lockoutTimer}s</p>
+                      </div>
+                   </div>
+                ) : (
+                  <>
+                    {/* Social Login */}
+                    <div className="grid grid-cols-2 gap-3 mb-8">
+                      <button className="flex items-center justify-center gap-2 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors dark:text-white shadow-sm">
+                        <Chrome size={20} className="text-slate-900 dark:text-white" /> 
+                        <span className="text-sm font-medium">Google</span>
+                      </button>
+                      <button className="flex items-center justify-center gap-2 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors dark:text-white shadow-sm">
+                        <Github size={20} className="text-slate-900 dark:text-white" /> 
+                        <span className="text-sm font-medium">GitHub</span>
+                      </button>
+                    </div>
 
-                <div className="relative flex items-center gap-4 mb-8">
-                  <div className="h-px bg-slate-200 dark:bg-slate-700 flex-1"></div>
-                  <span className="text-xs text-slate-400 uppercase font-medium">Or continue with</span>
-                  <div className="h-px bg-slate-200 dark:bg-slate-700 flex-1"></div>
-                </div>
+                    <div className="relative flex items-center gap-4 mb-8">
+                      <div className="h-px bg-slate-200 dark:bg-slate-700 flex-1"></div>
+                      <span className="text-xs text-slate-400 uppercase font-medium">Or continue with</span>
+                      <div className="h-px bg-slate-200 dark:bg-slate-700 flex-1"></div>
+                    </div>
 
-                <form onSubmit={handleSubmit} className="space-y-5">
-                  {mode === 'signup' && (
-                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="space-y-5">
+                    {errorMsg && <p className="text-red-500 text-xs text-center mb-4 font-medium">{errorMsg}</p>}
+
+                    <form onSubmit={mode === 'login' ? handleLoginSubmit : handleSignupSubmit} className="space-y-5">
+                      {mode === 'signup' && (
+                        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="space-y-5">
+                          <div className="relative group">
+                            <User className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-primary-500 transition-colors" size={20} />
+                            <input
+                              type="text"
+                              required
+                              value={name}
+                              onChange={(e) => setName(e.target.value)}
+                              placeholder="Full Name"
+                              className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-all dark:text-white shadow-sm"
+                            />
+                          </div>
+                          <div className="relative group">
+                            <GraduationCap className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-primary-500 transition-colors" size={20} />
+                            <select
+                              value={branch}
+                              onChange={(e) => setBranch(e.target.value)}
+                              className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-all dark:text-white appearance-none shadow-sm"
+                            >
+                              <option>Computer Science</option>
+                              <option>Mechanical Engineering</option>
+                              <option>Electrical Engineering</option>
+                              <option>Civil Engineering</option>
+                            </select>
+                            <ChevronRight className="absolute right-3 top-3.5 text-slate-400 pointer-events-none rotate-90" size={16} />
+                          </div>
+                        </motion.div>
+                      )}
+                      
                       <div className="relative group">
-                        <User className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-primary-500 transition-colors" size={20} />
+                        <Mail className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-primary-500 transition-colors" size={20} />
                         <input
-                          type="text"
+                          type="email"
                           required
-                          value={name}
-                          onChange={(e) => setName(e.target.value)}
-                          placeholder="Full Name"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder="Student Email"
                           className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-all dark:text-white shadow-sm"
                         />
                       </div>
-                      <div className="relative group">
-                        <GraduationCap className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-primary-500 transition-colors" size={20} />
-                        <select
-                          value={branch}
-                          onChange={(e) => setBranch(e.target.value)}
-                          className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-all dark:text-white appearance-none shadow-sm"
-                        >
-                          <option>Computer Science</option>
-                          <option>Mechanical Engineering</option>
-                          <option>Electrical Engineering</option>
-                          <option>Civil Engineering</option>
-                        </select>
-                        <ChevronRight className="absolute right-3 top-3.5 text-slate-400 pointer-events-none rotate-90" size={16} />
+
+                      <div className="space-y-1">
+                        <div className="relative group">
+                          <Lock className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-primary-500 transition-colors" size={20} />
+                          <input
+                            type="password"
+                            required
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            placeholder="Password"
+                            className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-all dark:text-white shadow-sm"
+                          />
+                        </div>
+                        {mode === 'signup' && <PasswordStrengthMeter password={password} />}
                       </div>
-                    </motion.div>
-                  )}
-                  
-                  <div className="relative group">
-                    <Mail className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-primary-500 transition-colors" size={20} />
-                    <input
-                      type="email"
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="Student Email"
-                      className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-all dark:text-white shadow-sm"
-                    />
-                  </div>
 
-                  <div className="space-y-1">
-                    <div className="relative group">
-                      <Lock className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-primary-500 transition-colors" size={20} />
-                      <input
-                        type="password"
-                        required
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="Password"
-                        className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-all dark:text-white shadow-sm"
-                      />
+                      <div className="flex justify-between items-center text-sm">
+                        <label className="flex items-center gap-2 cursor-pointer text-slate-600 dark:text-slate-400 select-none">
+                          <input 
+                            type="checkbox" 
+                            className="rounded border-slate-300 text-primary-600 focus:ring-primary-500" 
+                            checked={enable2FA}
+                            onChange={e => setEnable2FA(e.target.checked)}
+                          />
+                          {mode === 'login' ? 'Secure Login (2FA)' : 'Enable 2-Factor Auth'}
+                        </label>
+                        {mode === 'login' && <button type="button" className="text-primary-600 hover:text-primary-700 font-medium">Forgot Password?</button>}
+                      </div>
+
+                      <div className="pt-2 space-y-3">
+                        <button
+                          type="submit"
+                          disabled={loading}
+                          className="w-full py-3.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-bold shadow-lg shadow-primary-500/25 flex items-center justify-center gap-2 transition-all disabled:opacity-70 disabled:cursor-not-allowed group active:scale-[0.98]"
+                        >
+                          {loading ? (
+                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          ) : (
+                            <>
+                              {mode === 'login' ? 'Sign In' : 'Create Account'}
+                              <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                            </>
+                          )}
+                        </button>
+                        
+                        {mode === 'login' && (
+                          <button
+                            type="button"
+                            onClick={startFaceID}
+                            className="w-full py-3.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center gap-2 transition-all"
+                          >
+                            <ScanFace size={20} /> Login with Face ID
+                          </button>
+                        )}
+                      </div>
+                    </form>
+
+                    <div className="text-center mt-6">
+                      <p className="text-sm text-slate-600 dark:text-slate-400">
+                        {mode === 'login' ? "Don't have an account?" : "Already have an account?"}
+                        <button 
+                          onClick={() => {
+                             setMode(mode === 'login' ? 'signup' : 'login');
+                             setErrorMsg('');
+                             setEnable2FA(false);
+                          }}
+                          className="ml-2 font-semibold text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 transition-colors"
+                        >
+                          {mode === 'login' ? 'Sign up' : 'Log in'}
+                        </button>
+                      </p>
                     </div>
-                    {mode === 'signup' && <PasswordStrengthMeter password={password} />}
-                  </div>
-
-                  {mode === 'login' && (
-                    <div className="flex justify-between items-center text-sm">
-                      <label className="flex items-center gap-2 cursor-pointer text-slate-600 dark:text-slate-400">
-                        <input type="checkbox" className="rounded border-slate-300 text-primary-600 focus:ring-primary-500" />
-                        Remember me
-                      </label>
-                      <button type="button" className="text-primary-600 hover:text-primary-700 font-medium">Forgot Password?</button>
-                    </div>
-                  )}
-
-                  <div className="pt-2 space-y-3">
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className="w-full py-3.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-bold shadow-lg shadow-primary-500/25 flex items-center justify-center gap-2 transition-all disabled:opacity-70 disabled:cursor-not-allowed group active:scale-[0.98]"
-                    >
-                      {loading ? (
-                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      ) : (
-                        <>
-                          {mode === 'login' ? 'Sign In' : 'Create Account'}
-                          <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
-                        </>
-                      )}
-                    </button>
-                    
-                    {mode === 'login' && (
-                       <button
-                         type="button"
-                         onClick={startFaceID}
-                         className="w-full py-3.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center gap-2 transition-all"
-                       >
-                         <ScanFace size={20} /> Login with Face ID
-                       </button>
-                    )}
-                  </div>
-                </form>
-
-                <div className="text-center mt-6">
-                  <p className="text-sm text-slate-600 dark:text-slate-400">
-                    {mode === 'login' ? "Don't have an account?" : "Already have an account?"}
-                    <button 
-                      onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}
-                      className="ml-2 font-semibold text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 transition-colors"
-                    >
-                      {mode === 'login' ? 'Sign up' : 'Log in'}
-                    </button>
-                  </p>
-                </div>
+                  </>
+                )}
               </motion.div>
             )}
           </AnimatePresence>

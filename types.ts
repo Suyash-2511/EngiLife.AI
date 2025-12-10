@@ -28,15 +28,22 @@ export interface Achievement {
 }
 
 export interface User {
+  id: string;
   name: string;
   email: string;
   university?: string;
   branch?: string;
   semester?: number;
   bio?: string;
+  avatar?: string;
+  joinedDate: string;
   xp: number;
   level: number;
   achievements: Achievement[];
+  security: {
+    twoFactorEnabled: boolean;
+    lastLogin: string;
+  };
 }
 
 export interface Message {
@@ -45,6 +52,7 @@ export interface Message {
   text: string;
   timestamp: number;
   isError?: boolean;
+  mode?: 'simple' | 'socratic';
 }
 
 export interface Task {
@@ -61,6 +69,15 @@ export interface Expense {
   amount: number;
   category: string;
   date: string;
+}
+
+export interface SavingsGoal {
+  id: string;
+  name: string;
+  targetAmount: number;
+  currentAmount: number;
+  color: string;
+  icon: string;
 }
 
 export interface LabExperiment {

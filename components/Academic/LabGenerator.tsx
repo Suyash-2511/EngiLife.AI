@@ -1,71 +1,84 @@
 import React, { useState } from 'react';
-import { FileText, Download, RefreshCw, Printer, Clock, ChevronRight } from 'lucide-react';
+import { FileText, Download, RefreshCw, Printer, Clock, ChevronRight, MessageSquare, Code, BookOpen, HelpCircle } from 'lucide-react';
 import { Card } from '../Shared/Card';
-import { generateLabManual } from '../../services/gemini';
+import { generateLabManual, generateVivaQuestions, generateCodeSnippet } from '../../services/gemini';
 import ReactMarkdown from 'react-markdown';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAppContext } from '../../context/AppContext';
 
 interface ManualHistory {
   id: string;
   experiment: string;
   branch: string;
   content: string;
+  code?: string;
+  viva?: {question: string, answer: string}[];
   date: string;
 }
 
 export const LabGenerator: React.FC = () => {
+  const { awardXP } = useAppContext();
+  const [activeTab, setActiveTab] = useState<'manual' | 'viva' | 'code'>('manual');
+  
   const [experiment, setExperiment] = useState('');
   const [branch, setBranch] = useState('Computer Science');
-  const [manual, setManual] = useState('');
   const [loading, setLoading] = useState(false);
+  
+  // Current Content State
+  const [manual, setManual] = useState('');
+  const [code, setCode] = useState('');
+  const [viva, setViva] = useState<{question: string, answer: string}[]>([]);
+  
   const [history, setHistory] = useState<ManualHistory[]>([]);
+  const [vivaRevealed, setVivaRevealed] = useState<number[]>([]);
 
   const handleGenerate = async () => {
     if (!experiment) return;
     setLoading(true);
-    const result = await generateLabManual(experiment, branch);
-    setManual(result);
+    setActiveTab('manual');
+    setVivaRevealed([]);
+    
+    // Parallel generation
+    const [manualRes, codeRes, vivaRes] = await Promise.all([
+        generateLabManual(experiment, branch),
+        generateCodeSnippet(experiment),
+        generateVivaQuestions(experiment, branch)
+    ]);
+    
+    setManual(manualRes);
+    setCode(codeRes);
+    setViva(vivaRes);
     
     const newItem: ManualHistory = {
       id: Date.now().toString(),
       experiment,
       branch,
-      content: result,
+      content: manualRes,
+      code: codeRes,
+      viva: vivaRes,
       date: new Date().toLocaleDateString()
     };
     
     setHistory(prev => [newItem, ...prev]);
     setLoading(false);
+    awardXP(50);
   };
 
-  const handlePrint = () => {
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(`
-        <html>
-          <head>
-            <title>${experiment} - Lab Manual</title>
-            <style>
-              body { font-family: 'Times New Roman', serif; padding: 40px; line-height: 1.6; }
-              h1 { border-bottom: 2px solid #000; padding-bottom: 10px; }
-              h2 { color: #333; margin-top: 20px; text-transform: uppercase; font-size: 14px; border-bottom: 1px solid #ccc; }
-              ul, ol { margin-left: 20px; }
-              code { background: #f0f0f0; padding: 2px 5px; font-family: monospace; }
-              pre { background: #f0f0f0; padding: 10px; border-radius: 5px; overflow-x: auto; }
-            </style>
-          </head>
-          <body>
-            <h1>Experiment: ${experiment}</h1>
-            <p><strong>Branch:</strong> ${branch}</p>
-            <p><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
-            <hr/>
-            ${document.getElementById('markdown-content')?.innerHTML || ''}
-          </body>
-        </html>
-      `);
-      printWindow.document.close();
-      printWindow.print();
-    }
+  const loadHistory = (item: ManualHistory) => {
+      setExperiment(item.experiment);
+      setBranch(item.branch);
+      setManual(item.content);
+      setCode(item.code || '');
+      setViva(item.viva || []);
+      setVivaRevealed([]);
+  };
+
+  const toggleVivaAnswer = (index: number) => {
+      if (vivaRevealed.includes(index)) {
+          setVivaRevealed(vivaRevealed.filter(i => i !== index));
+      } else {
+          setVivaRevealed([...vivaRevealed, index]);
+      }
   };
 
   return (
@@ -103,7 +116,7 @@ export const LabGenerator: React.FC = () => {
               className="w-full py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium flex items-center justify-center gap-2 disabled:opacity-50 transition-all shadow-md shadow-primary-500/20"
             >
               {loading ? <RefreshCw className="animate-spin" size={18} /> : <FileText size={18} />}
-              Generate Manual
+              Generate Record
             </button>
           </div>
         </Card>
@@ -120,7 +133,7 @@ export const LabGenerator: React.FC = () => {
                     key={item.id}
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
-                    onClick={() => { setManual(item.content); setExperiment(item.experiment); }}
+                    onClick={() => loadHistory(item)}
                     className="w-full text-left p-3 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg group transition-colors border-b border-slate-50 dark:border-slate-800/50 last:border-0"
                  >
                     <div className="flex justify-between items-start">
@@ -139,65 +152,114 @@ export const LabGenerator: React.FC = () => {
         </Card>
       </div>
 
-      {/* Right Content: The Manual */}
+      {/* Right Content */}
       <div className="lg:col-span-8 h-full flex flex-col">
         <Card className="flex-1 flex flex-col min-h-0 relative bg-white dark:bg-slate-900" noPadding delay={0.3}>
-          {/* Toolbar */}
-          <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-950/50">
-             <div className="flex items-center gap-2">
-                <FileText size={18} className="text-primary-600" />
-                <h3 className="font-semibold text-slate-800 dark:text-white">Lab Record Preview</h3>
+          {/* Tabs & Toolbar */}
+          <div className="p-2 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-950">
+             <div className="flex gap-1">
+                 <button 
+                    onClick={() => setActiveTab('manual')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'manual' ? 'bg-white dark:bg-slate-800 shadow-sm text-primary-600 dark:text-primary-400' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                 >
+                    <BookOpen size={16} /> Manual
+                 </button>
+                 <button 
+                    onClick={() => setActiveTab('code')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'code' ? 'bg-white dark:bg-slate-800 shadow-sm text-primary-600 dark:text-primary-400' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                 >
+                    <Code size={16} /> Code
+                 </button>
+                 <button 
+                    onClick={() => setActiveTab('viva')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'viva' ? 'bg-white dark:bg-slate-800 shadow-sm text-primary-600 dark:text-primary-400' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                 >
+                    <HelpCircle size={16} /> Viva Voce
+                 </button>
              </div>
-             <div className="flex gap-2">
-                <button 
-                  onClick={handlePrint} 
-                  disabled={!manual}
-                  className="p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-50" 
-                  title="Print / Save PDF"
-                >
+             
+             {manual && (
+                <button className="p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
                    <Printer size={18} />
                 </button>
-             </div>
+             )}
           </div>
 
-          {/* Paper View */}
+          {/* Content Area */}
           <div className="flex-1 overflow-y-auto p-8 bg-white dark:bg-[#0d1117]">
-             {manual ? (
-               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-3xl mx-auto" id="markdown-content">
-                  {/* Paper Header Simulation */}
-                  <div className="border-b-2 border-slate-800 dark:border-slate-600 pb-4 mb-8 flex justify-between items-end">
-                     <div>
-                        <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-serif">{experiment}</h1>
-                        <p className="text-slate-500 dark:text-slate-400 font-serif italic mt-1">{branch} Engineering • Lab Record</p>
-                     </div>
-                     <div className="text-right">
-                        <div className="text-xs font-mono text-slate-400 border border-slate-300 dark:border-slate-700 px-2 py-1 rounded">
-                           Date: {new Date().toLocaleDateString()}
-                        </div>
-                     </div>
-                  </div>
-
-                  {/* Markdown Content */}
-                  <article className="prose prose-slate dark:prose-invert max-w-none prose-headings:font-serif prose-headings:font-bold prose-h2:border-b prose-h2:pb-2 prose-h2:mt-8 prose-h2:text-primary-700 dark:prose-h2:text-primary-400 prose-code:text-primary-600 dark:prose-code:text-primary-300 prose-code:bg-slate-50 dark:prose-code:bg-slate-800/50 prose-code:px-1 prose-code:rounded prose-pre:bg-slate-900 dark:prose-pre:bg-slate-950 prose-pre:shadow-lg">
-                    <ReactMarkdown>{manual}</ReactMarkdown>
-                  </article>
-
-                  {/* Viva Section Highlight */}
-                  <div className="mt-12 p-6 bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-800/30 rounded-xl">
-                     <h3 className="text-lg font-bold text-yellow-800 dark:text-yellow-500 mb-2">Viva Voce Prep</h3>
-                     <p className="text-sm text-yellow-700 dark:text-yellow-400/80 italic">
-                        Review the questions generated above to prepare for your lab evaluation.
-                     </p>
-                  </div>
-               </motion.div>
-             ) : (
+             {!manual ? (
                <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8">
                  <div className="w-20 h-20 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center mb-6">
                     <FileText size={32} className="opacity-20" />
                  </div>
-                 <h3 className="text-lg font-medium text-slate-600 dark:text-slate-300">No Manual Generated</h3>
-                 <p className="text-center max-w-sm mt-2 text-sm">Enter the experiment details on the left to generate a comprehensive lab manual with theory, code, and viva questions.</p>
+                 <h3 className="text-lg font-medium text-slate-600 dark:text-slate-300">Ready to Generate</h3>
+                 <p className="text-center max-w-sm mt-2 text-sm">Enter experiment details to generate a comprehensive lab manual, source code, and viva questions.</p>
                </div>
+             ) : (
+                <>
+                   {activeTab === 'manual' && (
+                     <motion.article initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="prose prose-slate dark:prose-invert max-w-none prose-headings:font-serif prose-headings:font-bold prose-h2:border-b prose-h2:pb-2 prose-h2:mt-8 prose-h2:text-primary-700 dark:prose-h2:text-primary-400 prose-code:text-primary-600 dark:prose-code:text-primary-300 prose-code:bg-slate-50 dark:prose-code:bg-slate-800/50 prose-code:px-1 prose-code:rounded prose-pre:bg-slate-900 dark:prose-pre:bg-slate-950 prose-pre:shadow-lg">
+                        <div className="border-b-2 border-slate-800 dark:border-slate-600 pb-4 mb-8">
+                           <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-serif m-0">{experiment}</h1>
+                           <p className="text-slate-500 dark:text-slate-400 font-serif italic mt-2 m-0">{branch} Engineering • Lab Record</p>
+                        </div>
+                        <ReactMarkdown>{manual}</ReactMarkdown>
+                     </motion.article>
+                   )}
+
+                   {activeTab === 'code' && (
+                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full">
+                        <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                           <Code className="text-primary-600" /> Source Code
+                        </h2>
+                        {code ? (
+                           <div className="relative">
+                              <pre className="p-6 rounded-xl bg-slate-900 text-slate-100 overflow-x-auto text-sm font-mono border border-slate-700 shadow-inner">
+                                <ReactMarkdown>{code}</ReactMarkdown>
+                              </pre>
+                           </div>
+                        ) : (
+                           <p className="text-slate-500 italic">No code snippet available for this experiment.</p>
+                        )}
+                     </motion.div>
+                   )}
+
+                   {activeTab === 'viva' && (
+                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                        <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+                           <HelpCircle className="text-primary-600" /> Viva Questions
+                        </h2>
+                        <div className="space-y-4">
+                           {viva.map((item, i) => (
+                              <div key={i} className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-900/50">
+                                 <button 
+                                    onClick={() => toggleVivaAnswer(i)}
+                                    className="w-full text-left p-4 font-medium text-slate-800 dark:text-slate-200 flex justify-between items-center hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                 >
+                                    <span className="flex gap-3">
+                                       <span className="text-primary-500 font-bold">Q{i+1}.</span> {item.question}
+                                    </span>
+                                    <ChevronRight size={16} className={`transition-transform ${vivaRevealed.includes(i) ? 'rotate-90' : ''}`} />
+                                 </button>
+                                 <AnimatePresence>
+                                    {vivaRevealed.includes(i) && (
+                                       <motion.div 
+                                          initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }}
+                                          className="overflow-hidden bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800"
+                                       >
+                                          <div className="p-4 pl-10 text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                                             {item.answer}
+                                          </div>
+                                       </motion.div>
+                                    )}
+                                 </AnimatePresence>
+                              </div>
+                           ))}
+                           {viva.length === 0 && <p className="text-slate-500 italic">No questions generated.</p>}
+                        </div>
+                     </motion.div>
+                   )}
+                </>
              )}
           </div>
         </Card>

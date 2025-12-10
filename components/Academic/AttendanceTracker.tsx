@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { 
   Plus, Check, X, Trash2, TrendingUp, Calculator, Bell, BellOff, 
   Clock, Pencil, Save, RotateCcw, AlertTriangle, Calendar, XCircle, 
-  MoreHorizontal, ChevronRight, GraduationCap, ArrowRight, ShieldCheck, AlertOctagon, Activity
+  MoreHorizontal, ChevronRight, GraduationCap, ArrowRight, ShieldCheck, AlertOctagon, Activity, Eye, Play
 } from 'lucide-react';
 import { Card } from '../Shared/Card';
 import { Button } from '../Shared/Button';
@@ -23,7 +23,7 @@ const getBunkStats = (attended: number, total: number, target: number) => {
        type: 'safe', 
        count: bunkable, 
        message: `Safe to bunk ${bunkable}`,
-       longMessage: `You can safely skip ${bunkable} more classes.`
+       longMessage: `You can safely skip ${bunkable} classes.`
      };
   } else {
      const catchup = Math.ceil((targetRatio * total - attended) / (1 - targetRatio));
@@ -31,10 +31,21 @@ const getBunkStats = (attended: number, total: number, target: number) => {
        type: 'danger', 
        count: catchup, 
        message: `Attend ${catchup} more`,
-       longMessage: `Attend the next ${catchup} classes to reach ${target}%.`
+       longMessage: `Attend the next ${catchup} classes.`
      };
   }
 };
+
+const getProjection = (attended: number, total: number) => {
+   const current = total > 0 ? (attended / total) * 100 : 0;
+   const nextAttended = ((attended + 1) / (total + 1)) * 100;
+   const nextMissed = (attended / (total + 1)) * 100;
+   
+   return {
+      attendGain: (nextAttended - current).toFixed(1),
+      missLoss: (current - nextMissed).toFixed(1)
+   };
+}
 
 // --- UI Components ---
 
@@ -80,30 +91,34 @@ const CircularProgress = ({ value, size = 120, strokeWidth = 10, color = "text-e
   );
 };
 
-const AttendanceHeatmap = () => {
-  // Generate last 4 weeks of dummy data
-  const days = Array.from({ length: 28 }, (_, i) => {
-    const val = Math.random();
-    // Simulate weekends
-    if (i % 7 === 5 || i % 7 === 6) return 'bg-slate-100 dark:bg-slate-800/50';
-    return val > 0.8 ? 'bg-emerald-500' : val > 0.4 ? 'bg-emerald-400/60' : val > 0.2 ? 'bg-rose-500/60' : 'bg-slate-200 dark:bg-slate-800';
-  });
+const AttendanceCalendar = ({ attended, total }: { attended: number, total: number }) => {
+   // Simulating a pattern based on percentage
+   const days = Array.from({ length: 30 }, (_, i) => {
+       const isPast = i < total;
+       if (!isPast) return 'future';
+       // Approximate the distribution based on attended count
+       // This is a visual approximation since we don't store exact dates
+       const chance = attended / total;
+       return Math.random() < chance ? 'present' : 'absent';
+   });
 
-  return (
-    <div className="flex gap-1.5 h-8 items-end">
-      {days.map((color, i) => (
-        <motion.div 
-          key={i} 
-          initial={{ height: '20%' }}
-          animate={{ height: '100%' }}
-          transition={{ delay: i * 0.02 }}
-          className={`w-1.5 rounded-sm ${color}`} 
-          title={`Day ${i+1}`} 
-        />
-      ))}
-    </div>
-  );
-};
+   return (
+       <div className="grid grid-cols-7 gap-1.5 mt-2">
+           {days.map((status, i) => (
+               <div 
+                  key={i} 
+                  className={`aspect-square rounded-md flex items-center justify-center text-[10px] font-medium transition-all hover:scale-110 ${
+                      status === 'future' ? 'bg-slate-50 dark:bg-slate-800 text-slate-300' :
+                      status === 'present' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 border border-emerald-200 dark:border-emerald-800' :
+                      'bg-rose-100 dark:bg-rose-900/30 text-rose-600 border border-rose-200 dark:border-rose-800'
+                  }`}
+               >
+                  {status === 'future' ? '' : i + 1}
+               </div>
+           ))}
+       </div>
+   )
+}
 
 // --- Modal Component ---
 
@@ -200,6 +215,13 @@ const SubjectDetailModal = ({
                    </div>
                 </div>
 
+                <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
+                    <h4 className="text-xs font-bold text-slate-500 uppercase mb-3 flex items-center gap-2">
+                        <Calendar size={14} /> Class Log (Simulated)
+                    </h4>
+                    <AttendanceCalendar attended={subject.attended} total={subject.total} />
+                </div>
+
                 <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
                    <h4 className="text-sm font-semibold text-slate-900 dark:text-white mb-3">Quick Fix</h4>
                    <div className="flex gap-3">
@@ -293,8 +315,7 @@ const SubjectDetailModal = ({
 
 export const AttendanceTracker: React.FC = () => {
   const { 
-    subjects, addSubject, updateAttendance, updateSubjectStats, deleteSubject,
-    reminders, addReminder, deleteReminder
+    subjects, addSubject, updateAttendance, updateSubjectStats, deleteSubject
   } = useAppContext();
   
   const [isAddMode, setIsAddMode] = useState(false);
@@ -321,20 +342,10 @@ export const AttendanceTracker: React.FC = () => {
     subjects.forEach(sub => updateAttendance(sub.id, true));
   };
 
-  const totalClasses = subjects.reduce((acc, curr) => acc + curr.total, 0);
-  const totalAttended = subjects.reduce((acc, curr) => acc + curr.attended, 0);
-  const overallPercentage = totalClasses > 0 ? Math.round((totalAttended / totalClasses) * 100) : 0;
-  
-  const subjectsAtRisk = subjects.filter(s => {
-      const pct = s.total > 0 ? (s.attended / s.total) * 100 : 0;
-      return pct < s.minPercent;
-  }).length;
-
-  const chartData = [
-    { name: 'Attended', value: totalAttended },
-    { name: 'Missed', value: totalClasses - totalAttended },
-  ];
-  const COLORS = ['#10b981', '#f43f5e'];
+  const safeToBunkSubjects = subjects.filter(s => {
+      const stats = getBunkStats(s.attended, s.total, s.minPercent);
+      return stats.type === 'safe' && stats.count > 0;
+  });
 
   return (
     <div className="space-y-8 pb-8">
@@ -365,101 +376,82 @@ export const AttendanceTracker: React.FC = () => {
         {/* Main Stats Card */}
         <Card className="lg:col-span-2 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white border-slate-800 relative overflow-hidden" noPadding>
              <div className="absolute top-0 right-0 w-64 h-64 bg-primary-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
-             <div className="absolute bottom-0 left-0 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl -ml-12 -mb-12 pointer-events-none"></div>
-
              <div className="p-8 relative z-10 grid grid-cols-1 md:grid-cols-2 gap-8 h-full">
                 <div className="flex flex-col justify-between">
                     <div>
                         <h3 className="text-slate-400 font-semibold text-xs uppercase tracking-widest flex items-center gap-2 mb-2">
-                            <TrendingUp size={14} className="text-emerald-400" /> Overall Health
+                            <Activity size={14} className="text-emerald-400" /> Bunk Monitor
                         </h3>
-                        <div className="flex items-baseline gap-2 mb-4">
-                            <span className={`text-6xl font-bold font-mono tracking-tighter ${overallPercentage >= 75 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                                {overallPercentage}
-                            </span>
-                            <span className="text-2xl font-bold text-slate-500">%</span>
+                        <div className="space-y-4">
+                            {safeToBunkSubjects.length > 0 ? (
+                                <div>
+                                    <p className="text-2xl font-bold mb-1">Safe to skip today</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {safeToBunkSubjects.slice(0, 3).map(s => {
+                                             const stats = getBunkStats(s.attended, s.total, s.minPercent);
+                                             return (
+                                                 <div key={s.id} className="bg-emerald-500/20 border border-emerald-500/30 px-3 py-1 rounded-full text-xs font-medium text-emerald-300 flex items-center gap-1">
+                                                     {s.name} <span className="bg-emerald-500 text-slate-900 px-1 rounded text-[10px]">{stats.count}</span>
+                                                 </div>
+                                             );
+                                        })}
+                                        {safeToBunkSubjects.length > 3 && <span className="text-xs text-slate-400 self-center">+{safeToBunkSubjects.length - 3} more</span>}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div>
+                                    <p className="text-xl font-bold text-rose-300">No safe bunks available!</p>
+                                    <p className="text-sm text-slate-400 mt-1">You need to attend more classes to build a buffer.</p>
+                                </div>
+                            )}
                         </div>
-                        <p className="text-sm text-slate-300 leading-relaxed max-w-xs">
-                           You are currently <strong>{overallPercentage >= 75 ? 'on track' : 'at risk'}</strong>. 
-                           {overallPercentage >= 75 ? ' Keep maintaining your streak!' : ' You need to attend more classes to reach the safe zone.'}
-                        </p>
                     </div>
-                    <div className="grid grid-cols-3 gap-4 pt-6 border-t border-slate-700/50">
-                       <div>
-                          <p className="text-xs text-slate-500 mb-1">Total</p>
-                          <p className="text-xl font-bold font-mono">{totalClasses}</p>
-                       </div>
-                       <div>
-                          <p className="text-xs text-emerald-500/70 mb-1">Present</p>
-                          <p className="text-xl font-bold font-mono text-emerald-400">{totalAttended}</p>
-                       </div>
-                       <div>
-                          <p className="text-xs text-rose-500/70 mb-1">Absent</p>
-                          <p className="text-xl font-bold font-mono text-rose-400">{totalClasses - totalAttended}</p>
-                       </div>
+                    <div className="pt-6 border-t border-slate-700/50 mt-4">
+                       <p className="text-xs text-slate-400">
+                          Tip: Maintaining 80% is safer than 75% for emergencies.
+                       </p>
                     </div>
                 </div>
                 
-                <div className="flex flex-col justify-between items-center md:items-end">
-                   <div className="w-32 h-32 relative">
+                <div className="flex flex-col items-center justify-center bg-white/5 rounded-xl border border-white/10 p-4">
+                   <h4 className="text-sm font-semibold mb-4 text-slate-300">Overall Attendance Health</h4>
+                   <div className="relative w-32 h-32">
                         <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
                                 <Pie
-                                    data={chartData}
-                                    cx="50%"
-                                    cy="50%"
-                                    innerRadius={45}
-                                    outerRadius={60}
-                                    paddingAngle={5}
-                                    dataKey="value"
-                                    stroke="none"
+                                    data={[
+                                        { name: 'Safe', value: subjects.filter(s => (s.attended/s.total) >= (s.minPercent/100)).length },
+                                        { name: 'Risk', value: subjects.filter(s => (s.attended/s.total) < (s.minPercent/100)).length }
+                                    ]}
+                                    cx="50%" cy="50%" innerRadius={45} outerRadius={60} paddingAngle={5}
+                                    dataKey="value" stroke="none"
                                 >
-                                    {chartData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                    ))}
+                                    <Cell fill="#10b981" />
+                                    <Cell fill="#f43f5e" />
                                 </Pie>
                             </PieChart>
                         </ResponsiveContainer>
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                           <Activity size={24} className="text-slate-600" />
+                        <div className="absolute inset-0 flex items-center justify-center flex-col pointer-events-none">
+                           <span className="text-2xl font-bold">{Math.round((subjects.reduce((acc, s) => acc + s.attended, 0) / Math.max(subjects.reduce((acc, s) => acc + s.total, 0), 1)) * 100)}%</span>
+                           <span className="text-[10px] text-slate-400 uppercase">Avg</span>
                         </div>
-                   </div>
-                   <div className="w-full mt-auto text-right">
-                       <p className="text-xs text-slate-500 mb-2 uppercase tracking-wide">Monthly Activity</p>
-                       <AttendanceHeatmap />
                    </div>
                 </div>
              </div>
         </Card>
 
-        {/* Intelligence Card */}
-        <Card title="Quick Insights" className="flex flex-col">
-            <div className="flex-1 space-y-4">
-                <div className={`p-4 rounded-xl border flex items-start gap-3 ${subjectsAtRisk > 0 ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-100 dark:border-rose-900/30' : 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-900/30'}`}>
-                    <div className={`p-2 rounded-lg ${subjectsAtRisk > 0 ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-600' : 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600'}`}>
-                        {subjectsAtRisk > 0 ? <AlertTriangle size={20} /> : <ShieldCheck size={20} />}
-                    </div>
-                    <div>
-                        <h4 className={`font-semibold ${subjectsAtRisk > 0 ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
-                           {subjectsAtRisk > 0 ? 'Attention Needed' : 'All Systems Good'}
-                        </h4>
-                        <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
-                           {subjectsAtRisk > 0 
-                             ? `${subjectsAtRisk} subjects are below your target threshold. Consider prioritizing them.` 
-                             : 'You are maintaining a healthy attendance record across all subjects.'}
-                        </p>
-                    </div>
+        {/* Quick Add / Sim Card */}
+        <div className="space-y-6">
+            <button 
+                onClick={() => setIsAddMode(true)}
+                className="w-full h-full min-h-[200px] rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-primary-400 dark:hover:border-primary-500 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-all flex flex-col items-center justify-center gap-3 group text-slate-400 hover:text-primary-600 dark:hover:text-primary-400"
+            >
+                <div className="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center group-hover:bg-primary-50 dark:group-hover:bg-primary-900/20 transition-colors">
+                    <Plus size={32} />
                 </div>
-
-                <div className="space-y-2">
-                   <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Smart Suggestions</h4>
-                   <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-800 text-sm text-slate-600 dark:text-slate-400 flex items-center gap-2">
-                       <Calculator size={14} className="text-primary-500" />
-                       <span>To reach 85% overall, attend next 4 classes.</span>
-                   </div>
-                </div>
-            </div>
-        </Card>
+                <span className="font-bold text-lg">Add New Subject</span>
+            </button>
+        </div>
       </div>
 
       {/* Add Subject Form (Collapsible) */}
@@ -513,7 +505,7 @@ export const AttendanceTracker: React.FC = () => {
 
       {/* Grid */}
       <motion.div 
-        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
         initial="hidden" animate="show"
         variants={{ hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.05 } } }}
       >
@@ -521,39 +513,43 @@ export const AttendanceTracker: React.FC = () => {
           const percentage = subject.total > 0 ? Math.round((subject.attended / subject.total) * 100) : 0;
           const isSafe = percentage >= subject.minPercent;
           const bunkStats = getBunkStats(subject.attended, subject.total, subject.minPercent);
+          const projection = getProjection(subject.attended, subject.total);
 
           return (
             <motion.div key={subject.id} variants={{ hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } }}>
               <Card className="h-full flex flex-col justify-between hover:shadow-lg transition-all duration-300 group cursor-pointer border border-transparent hover:border-primary-200 dark:hover:border-slate-700" noPadding>
                 <div onClick={() => setSelectedSubjectId(subject.id)} className="p-5 flex-1 relative">
-                    {/* Bunk Monitor Badge */}
-                    <div className={`absolute top-4 right-4 text-[10px] font-bold px-2 py-1 rounded-full border ${bunkStats.type === 'safe' ? 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800' : 'bg-rose-50 text-rose-700 border-rose-100 dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800'}`}>
-                       {bunkStats.message}
+                    <div className="flex justify-between items-start mb-4">
+                        <h3 className="font-bold text-slate-800 dark:text-slate-100 text-lg truncate pr-4 flex-1" title={subject.name}>{subject.name}</h3>
+                        <div className={`text-[10px] font-bold px-2 py-1 rounded-full border whitespace-nowrap ${bunkStats.type === 'safe' ? 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800' : 'bg-rose-50 text-rose-700 border-rose-100 dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800'}`}>
+                           {bunkStats.message}
+                        </div>
                     </div>
-
-                    <h3 className="font-bold text-slate-800 dark:text-slate-100 text-lg truncate pr-20 mb-6" title={subject.name}>{subject.name}</h3>
 
                     <div className="flex items-center gap-6">
                         <div className="relative">
                            <CircularProgress 
                                value={percentage} 
-                               size={80} 
-                               strokeWidth={8}
+                               size={70} 
+                               strokeWidth={6}
                                color={isSafe ? 'text-emerald-500' : 'text-rose-500'}
                            />
                         </div>
-                        <div className="flex-1">
-                           <div className="flex justify-between items-center text-sm mb-1">
-                              <span className="text-slate-500">Target</span>
-                              <span className="font-mono font-medium text-slate-700 dark:text-slate-300">{subject.minPercent}%</span>
-                           </div>
-                           <div className="flex justify-between items-center text-sm">
-                              <span className="text-slate-500">Attended</span>
-                              <span className="font-mono font-medium text-slate-700 dark:text-slate-300">{subject.attended}/{subject.total}</span>
-                           </div>
-                           <div className="mt-3 h-1 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                              <div className={`h-full rounded-full ${isSafe ? 'bg-emerald-500' : 'bg-rose-500'}`} style={{ width: `${Math.min(percentage, 100)}%` }}></div>
-                           </div>
+                        <div className="flex-1 space-y-2">
+                            <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg">
+                                <div className="text-center flex-1 border-r border-slate-200 dark:border-slate-700">
+                                    <p className="text-[10px] text-slate-400 uppercase">Present</p>
+                                    <p className="font-bold text-slate-800 dark:text-white">{subject.attended}</p>
+                                </div>
+                                <div className="text-center flex-1">
+                                    <p className="text-[10px] text-slate-400 uppercase">Total</p>
+                                    <p className="font-bold text-slate-800 dark:text-white">{subject.total}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center justify-between text-xs text-slate-400 px-1">
+                                <span className="flex items-center gap-1"><Play size={10} className="fill-emerald-500 text-emerald-500" /> +{projection.attendGain}%</span>
+                                <span className="flex items-center gap-1"><Play size={10} className="fill-rose-500 text-rose-500 rotate-180" /> -{projection.missLoss}%</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -576,19 +572,6 @@ export const AttendanceTracker: React.FC = () => {
             </motion.div>
           );
         })}
-        
-        {/* Quick Add Card at the end of grid */}
-        <motion.div variants={{ hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } }}>
-           <button 
-             onClick={() => setIsAddMode(true)}
-             className="w-full h-full min-h-[220px] rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-primary-400 dark:hover:border-primary-600 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-all flex flex-col items-center justify-center gap-3 group text-slate-400 hover:text-primary-500"
-           >
-              <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center group-hover:bg-primary-50 dark:group-hover:bg-primary-900/20 transition-colors">
-                 <Plus size={24} />
-              </div>
-              <span className="font-medium">Add Subject</span>
-           </button>
-        </motion.div>
       </motion.div>
     </div>
   );

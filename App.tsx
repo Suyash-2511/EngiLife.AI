@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, useLocation } from 'react-router-dom';
-import { Menu, Bell, Sun, Moon, Check, X } from 'lucide-react';
+import { Bell, Sun, Moon, Menu } from 'lucide-react';
 import { AppRoute } from './types';
 import { Dashboard } from './components/Dashboard';
 import { StudyCompanion } from './components/Academic/StudyCompanion';
@@ -44,119 +44,91 @@ const ThemeToggle: React.FC = () => {
   };
 
   return (
-    <motion.button 
+    <button 
       onClick={toggleTheme}
-      whileTap={{ scale: 0.9 }}
-      className="p-2.5 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors backdrop-blur-sm"
+      className="p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+      title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
     >
-      {isDark ? <Sun size={20} /> : <Moon size={20} />}
-    </motion.button>
+      {isDark ? <Sun size={18} /> : <Moon size={18} />}
+    </button>
   );
 };
 
-const NotificationDropdown: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+const NotificationBell: React.FC = () => {
   const { notifications, markNotificationRead, clearNotifications } = useAppContext();
-  
-  if (!isOpen) return null;
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10, scale: 0.95 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: 10, scale: 0.95 }}
-      className="absolute top-16 right-6 w-80 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl z-50 overflow-hidden"
-    >
-      <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
-        <h3 className="font-semibold text-slate-800 dark:text-white">Notifications</h3>
-        {notifications.length > 0 && (
-          <button onClick={clearNotifications} className="text-xs text-primary-600 hover:text-primary-700 font-medium">Clear all</button>
-        )}
-      </div>
-      <div className="max-h-[300px] overflow-y-auto">
-        {notifications.length === 0 ? (
-          <div className="p-8 text-center text-slate-400 text-sm">
-            No new notifications
-          </div>
-        ) : (
-          notifications.map(n => (
-            <div 
-              key={n.id} 
-              onClick={() => markNotificationRead(n.id)}
-              className={`p-4 border-b border-slate-50 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer ${!n.read ? 'bg-primary-50/30 dark:bg-primary-900/10' : ''}`}
-            >
-              <div className="flex justify-between items-start gap-3">
-                <div className="flex-1">
-                  <p className={`text-sm ${!n.read ? 'font-semibold text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-400'}`}>
-                    {n.title}
-                  </p>
-                  <p className="text-xs text-slate-500 mt-1">{n.message}</p>
-                  <p className="text-[10px] text-slate-400 mt-2">
-                    {new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </p>
-                </div>
-                {!n.read && <div className="w-2 h-2 bg-primary-500 rounded-full mt-1.5"></div>}
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    </motion.div>
-  );
-};
-
-const Header: React.FC<{ onMenuClick: () => void }> = ({ onMenuClick }) => {
-  const { notifications } = useAppContext();
-  const [showNotifications, setShowNotifications] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
   const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
-    <motion.header 
-      initial={{ y: -20, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      className="sticky top-0 z-30 px-6 py-4 flex items-center justify-between md:justify-end bg-slate-50/60 dark:bg-slate-950/60 backdrop-blur-md border-b border-slate-200/50 dark:border-slate-800/50"
-    >
-      <button onClick={onMenuClick} className="md:hidden p-2 -ml-2 text-slate-600 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 rounded-lg backdrop-blur-sm">
-        <Menu size={24} />
-      </button>
-      <div className="flex items-center gap-4 relative">
-        <ThemeToggle />
-        <motion.button 
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => setShowNotifications(!showNotifications)}
-          className={`relative p-2.5 rounded-full border shadow-sm transition-colors backdrop-blur-sm ${
-             showNotifications 
-             ? 'bg-primary-100 text-primary-600 border-primary-200' 
-             : 'bg-white/50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
-          }`}
-        >
-          <Bell size={20} />
-          {unreadCount > 0 && (
-            <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900 ring-1 ring-red-500/30"></span>
-          )}
-        </motion.button>
-
-        {/* Backdrop for mobile to close dropdown */}
-        {showNotifications && (
-           <div className="fixed inset-0 z-40" onClick={() => setShowNotifications(false)}></div>
+    <div className="relative">
+      <button 
+        onClick={() => setIsOpen(!isOpen)}
+        className="relative p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+      >
+        <Bell size={18} />
+        {unreadCount > 0 && (
+          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white dark:ring-slate-900"></span>
         )}
-        
-        <AnimatePresence>
-          {showNotifications && (
-            <NotificationDropdown isOpen={showNotifications} onClose={() => setShowNotifications(false)} />
-          )}
-        </AnimatePresence>
-      </div>
-    </motion.header>
+      </button>
+
+      <AnimatePresence>
+        {isOpen && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)}></div>
+            <motion.div
+              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.95 }}
+              className="absolute right-0 mt-2 w-80 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-50 overflow-hidden"
+            >
+              <div className="p-3 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-950">
+                <h3 className="font-semibold text-xs uppercase tracking-wider text-slate-500">Notifications</h3>
+                {notifications.length > 0 && (
+                  <button onClick={clearNotifications} className="text-xs text-primary-600 hover:text-primary-700 font-medium">Clear</button>
+                )}
+              </div>
+              <div className="max-h-[300px] overflow-y-auto">
+                {notifications.length === 0 ? (
+                  <div className="p-6 text-center text-slate-400 text-sm">
+                    All caught up!
+                  </div>
+                ) : (
+                  notifications.map(n => (
+                    <div 
+                      key={n.id} 
+                      onClick={() => markNotificationRead(n.id)}
+                      className={`p-3 border-b border-slate-50 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer ${!n.read ? 'bg-primary-50/30 dark:bg-primary-900/10' : ''}`}
+                    >
+                      <div className="flex justify-between items-start gap-3">
+                        <div className="flex-1">
+                          <p className={`text-sm ${!n.read ? 'font-semibold text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-400'}`}>
+                            {n.title}
+                          </p>
+                          <p className="text-xs text-slate-500 mt-1 line-clamp-2">{n.message}</p>
+                          <p className="text-[10px] text-slate-400 mt-1.5 font-mono">
+                            {new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                        {!n.read && <div className="w-1.5 h-1.5 bg-primary-500 rounded-full mt-1.5"></div>}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
   );
 };
 
 const PageWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <motion.div
-    initial={{ opacity: 0, y: 15, scale: 0.98 }}
-    animate={{ opacity: 1, y: 0, scale: 1 }}
-    exit={{ opacity: 0, y: -15, scale: 0.98 }}
-    transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+    initial={{ opacity: 0, y: 10 }}
+    animate={{ opacity: 1, y: 0 }}
+    exit={{ opacity: 0, y: -10 }}
+    transition={{ duration: 0.3, ease: "easeOut" }}
     className="h-full"
   >
     {children}
@@ -165,8 +137,6 @@ const PageWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 
 const AnimatedRoutes: React.FC = () => {
   const location = useLocation();
-  const { user } = useAppContext();
-  
   return (
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
@@ -184,9 +154,9 @@ const AnimatedRoutes: React.FC = () => {
 }
 
 const MainLayout: React.FC = () => {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, setUser } = useAppContext();
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     const hasCompletedOnboarding = localStorage.getItem('engiLife_onboarding_completed');
@@ -216,8 +186,7 @@ const MainLayout: React.FC = () => {
   }
 
   return (
-    // Changed bg to be transparent/subtle so canvas shows through
-    <div className="min-h-screen bg-slate-50/80 dark:bg-slate-950/80 text-slate-900 dark:text-slate-100 font-sans selection:bg-primary-100 selection:text-primary-900 transition-colors duration-300 relative">
+    <div className="flex h-screen overflow-hidden bg-slate-50/90 dark:bg-slate-950/90 text-slate-900 dark:text-slate-100 font-sans selection:bg-primary-100 selection:text-primary-900 transition-colors duration-300">
       <BackgroundCanvas />
       
       {showOnboarding && <OnboardingTutorial onComplete={completeOnboarding} />}
@@ -225,14 +194,30 @@ const MainLayout: React.FC = () => {
       <Sidebar 
         isOpen={sidebarOpen} 
         onClose={() => setSidebarOpen(false)} 
-        onLogout={handleLogout}
-        user={user}
+        onLogout={handleLogout} 
+        user={user} 
       />
       
-      <div className="md:ml-72 transition-all duration-300 min-h-screen flex flex-col relative z-10">
-        <Header onMenuClick={() => setSidebarOpen(true)} />
-        <main className="p-4 md:p-8 max-w-7xl mx-auto w-full flex-1">
-          <AnimatedRoutes />
+      <div className="relative flex flex-col flex-1 overflow-y-auto overflow-x-hidden md:ml-72 transition-all duration-300">
+        <header className="flex items-center justify-between p-4 md:hidden">
+          <button onClick={() => setSidebarOpen(true)} className="p-2 text-slate-600 dark:text-slate-300">
+             <Menu size={24} />
+          </button>
+          <span className="font-bold text-lg">EngiLife</span>
+          <div className="flex gap-2">
+            <ThemeToggle />
+            <NotificationBell />
+          </div>
+        </header>
+
+        <main className="w-full max-w-7xl mx-auto p-4 md:p-8 pb-24">
+           {/* Top Tools Row (Desktop) */}
+           <div className="hidden md:flex justify-end gap-2 mb-6">
+              <ThemeToggle />
+              <NotificationBell />
+           </div>
+
+           <AnimatedRoutes />
         </main>
       </div>
 
