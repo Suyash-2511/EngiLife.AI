@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 
 // Initialize the client.
@@ -15,8 +16,9 @@ export const generateStudyPlan = async (subjects: string[], pendingTasks: string
       Ensure the timeline is sequential starting from 09:00.
     `;
     
+    // Updated to gemini-3-flash-preview for basic text tasks
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-flash-preview',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -36,56 +38,71 @@ export const generateStudyPlan = async (subjects: string[], pendingTasks: string
     });
 
     const json = JSON.parse(response.text || "[]");
-    return json.map((item: any) => ({ ...item, status: 'upcoming' }));
+    const safeJson = Array.isArray(json) ? json : [];
+    return safeJson.map((item: any) => ({ ...item, status: 'upcoming' }));
   } catch (error) {
     console.error("Gemini API Error:", error);
     return [];
   }
 };
 
-export const explainConcept = async (query: string, branch: string, mode: 'simple' | 'socratic' = 'simple'): Promise<string> => {
+export const explainConcept = async (query: string, branch: string, mode: 'simple' | 'socratic' = 'simple', imageBase64?: string): Promise<string> => {
   try {
-    let prompt = '';
+    let systemInstruction = '';
+    
     if (mode === 'socratic') {
-      prompt = `
+      systemInstruction = `
         Act as a Socratic tutor for ${branch} engineering. 
-        The student asks: "${query}".
-        
         Rules:
         1. Do NOT give the direct answer or definition immediately.
         2. Ask a thought-provoking, guiding question to help the student derive the answer themselves.
         3. Break down complex concepts into smaller, logical steps.
         4. If the student's previous input suggests confusion, provide a small hint before asking the next question.
-        5. Keep responses concise, conversational, and encouraging.
       `;
     } else {
-      prompt = `
+      systemInstruction = `
         You are an expert engineering tutor specialized in ${branch}.
-        Explain the following concept clearly, using analogies where appropriate.
-        Use Markdown formatting (bolding, lists, code blocks) to make it readable.
-        If it involves math, write the formula clearly.
-        Concept: "${query}"
-        Keep it concise but comprehensive (under 300 words).
+        Explain the concept clearly. Use Markdown (bold, lists, code blocks).
+        If it involves math, write the formula clearly using standard text/unicode or LaTeX-like syntax.
+        If an image is provided, analyze the diagram, circuit, or problem shown in detail.
       `;
     }
 
+    const parts: any[] = [{ text: query }];
+    
+    if (imageBase64) {
+      // Remove data URL prefix if present for the API call
+      const cleanBase64 = imageBase64.split(',')[1] || imageBase64;
+      parts.push({
+        inlineData: {
+          mimeType: "image/jpeg",
+          data: cleanBase64
+        }
+      });
+    }
+
+    // Updated to gemini-3-pro-preview for complex reasoning and STEM tasks
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
+      model: 'gemini-3-pro-preview',
+      contents: { parts },
+      config: {
+        systemInstruction: systemInstruction
+      }
     });
     return response.text || "No explanation found.";
   } catch (error) {
     console.error("Gemini API Error:", error);
-    return "Failed to get explanation.";
+    return "Failed to get explanation. Please try again.";
   }
 };
 
-export const generateLabManual = async (experimentName: string, branch: string): Promise<string> => {
+export const generateLabManual = async (experimentName: string, branch: string, requirements?: string): Promise<string> => {
   try {
     const prompt = `
       Generate a structured lab manual for an engineering experiment.
       Branch: ${branch}
       Experiment: "${experimentName}"
+      ${requirements ? `Specific Requirements/Constraints: "${requirements}"` : ''}
       
       Structure required (Use Markdown H2 for headers):
       1. **Objective**
@@ -98,8 +115,9 @@ export const generateLabManual = async (experimentName: string, branch: string):
       Format as clean Markdown.
     `;
 
+    // Updated to gemini-3-flash-preview for basic text tasks
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-flash-preview',
       contents: prompt,
     });
     return response.text || "Could not generate manual.";
@@ -109,15 +127,17 @@ export const generateLabManual = async (experimentName: string, branch: string):
   }
 };
 
-export const generateVivaQuestions = async (experimentName: string, branch: string): Promise<any[]> => {
+export const generateVivaQuestions = async (experimentName: string, branch: string, requirements?: string): Promise<any[]> => {
   try {
     const prompt = `
       Generate 5 viva voce questions and answers for the experiment: "${experimentName}" (${branch}).
+      ${requirements ? `Take into account these requirements: "${requirements}".` : ''}
       Return JSON: [{ "question": string, "answer": string }]
     `;
 
+    // Updated to gemini-3-flash-preview for basic text tasks
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-flash-preview',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -139,16 +159,20 @@ export const generateVivaQuestions = async (experimentName: string, branch: stri
   }
 };
 
-export const generateCodeSnippet = async (experimentName: string): Promise<string> => {
+export const generateCodeSnippet = async (experimentName: string, requirements?: string): Promise<string> => {
     try {
         const prompt = `
           Write the code implementation for "${experimentName}". 
-          If it's a CS experiment, provide C++/Python/Java code.
-          If it's Electronics, provide Verilog/MATLAB/Arduino code if applicable.
+          ${requirements ? `Follow these specific requirements: "${requirements}".` : ''}
+          If no requirements specified:
+          - If it's a CS experiment, provide C++/Python/Java code.
+          - If it's Electronics, provide Verilog/MATLAB/Arduino code if applicable.
+          
           Wrap in markdown code block.
         `;
+        // Updated to gemini-3-pro-preview for coding and complex tasks
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3-pro-preview',
             contents: prompt
         });
         return response.text || "";
@@ -171,8 +195,9 @@ export const analyzeResume = async (skills: string[], experience: string): Promi
       Return JSON: { "score": number, "feedback": string[], "keywords": string[] }
     `;
 
+    // Updated to gemini-3-pro-preview for complex reasoning
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-pro-preview',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -192,21 +217,60 @@ export const analyzeResume = async (skills: string[], experience: string): Promi
   }
 };
 
+export const generateJobMatches = async (role: string, skills: string[]): Promise<any[]> => {
+  try {
+    const prompt = `
+      Generate 3 realistic job opportunity listings for a "${role}" role suited for a student with these skills: ${skills.join(', ')}.
+      Return JSON: [{ "role": string, "company": string, "match": number, "skills": string[] }]
+      match should be a number between 60 and 99.
+    `;
+    
+    // Updated to gemini-3-flash-preview for basic text tasks
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              role: { type: Type.STRING },
+              company: { type: Type.STRING },
+              match: { type: Type.INTEGER },
+              skills: { type: Type.ARRAY, items: { type: Type.STRING } }
+            }
+          }
+        }
+      }
+    });
+    return JSON.parse(response.text || "[]");
+  } catch (error) {
+    return [];
+  }
+};
+
 export const generateResumeTips = async (skills: string[], experience: string): Promise<string> => {
   // Keeping for backward compatibility or simpler calls
   return "Deprecated: Use analyzeResume";
 };
 
-export const generateInterviewQuestion = async (role: string, context?: string): Promise<string> => {
+export const generateInterviewQuestion = async (role: string, focus: string = 'General', context?: string): Promise<string> => {
   try {
     const prompt = `
-      You are a technical interviewer for a ${role} position.
-      ${context ? `Previous context: ${context}` : ''}
-      Ask a relevant behavioral or technical question suitable for a fresh engineering graduate.
-      Just ask the question, do not provide the answer.
+      You are a professional technical interviewer for a ${role} position.
+      Interview Focus: ${focus}.
+      ${context ? `Conversation Context: ${context}` : ''}
+      
+      Ask ONE relevant, challenging question suitable for an engineering graduate.
+      - If focus is "Behavioral", ask about soft skills, conflict resolution, or past projects.
+      - If focus is "Technical", ask a specific concept or problem related to the role.
+      - Keep it professional and direct. Do NOT provide the answer.
     `;
+    // Updated to gemini-3-flash-preview for basic text tasks
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-flash-preview',
       contents: prompt,
     });
     return response.text || "Tell me about yourself.";
@@ -222,15 +286,16 @@ export const evaluateInterviewAnswer = async (question: string, answer: string):
       Question: "${question}"
       My Answer: "${answer}"
       
-      1. Provide brief feedback (what was good, what to improve).
+      1. Provide brief, constructive feedback (what was good, what to improve).
       2. Rate the answer out of 10.
-      3. Ask a follow-up question or a new question.
+      3. Generate the Next Question to continue the flow.
       
       Return JSON format: { "feedback": string, "rating": number, "nextQuestion": string }
     `;
 
+    // Updated to gemini-3-pro-preview for complex reasoning and evaluation
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-pro-preview',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -251,6 +316,54 @@ export const evaluateInterviewAnswer = async (question: string, answer: string):
   }
 };
 
+export const generateInterviewReport = async (history: any[]): Promise<any> => {
+  try {
+    const transcript = history.map(h => `${h.role === 'ai' ? 'Interviewer' : 'Candidate'}: ${h.text}`).join('\n');
+    const prompt = `
+      Analyze the following mock interview transcript for an engineering role.
+      
+      TRANSCRIPT:
+      ${transcript}
+      
+      Provide a structured evaluation:
+      1. Overall Score (0-100).
+      2. Technical Accuracy (0-100).
+      3. Communication Skills (0-100).
+      4. Key Strengths (array of strings).
+      5. Areas for Improvement (array of strings).
+      6. Final Verdict (Hire, No Hire, Strong Hire, Leaning Hire).
+      7. A brief executive summary (max 50 words).
+
+      Return JSON.
+    `;
+
+    // Updated to gemini-3-pro-preview for complex text tasks
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-pro-preview',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            overallScore: { type: Type.INTEGER },
+            technicalScore: { type: Type.INTEGER },
+            communicationScore: { type: Type.INTEGER },
+            strengths: { type: Type.ARRAY, items: { type: Type.STRING } },
+            improvements: { type: Type.ARRAY, items: { type: Type.STRING } },
+            verdict: { type: Type.STRING },
+            summary: { type: Type.STRING }
+          }
+        }
+      }
+    });
+    return JSON.parse(response.text || "{}");
+  } catch (error) {
+    console.error(error);
+    return null;
+  }
+};
+
 export const generateCareerRoadmap = async (role: string): Promise<any[]> => {
   try {
     const prompt = `
@@ -259,8 +372,9 @@ export const generateCareerRoadmap = async (role: string): Promise<any[]> => {
       Return JSON: [{ "step": number, "title": string, "duration": string, "topics": string }]
     `;
     
+    // Updated to gemini-3-flash-preview for basic text tasks
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-flash-preview',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -285,6 +399,112 @@ export const generateCareerRoadmap = async (role: string): Promise<any[]> => {
   }
 };
 
+export const analyzeSkillGap = async (currentSkills: string[], targetRole: string, jobDescription?: string): Promise<any> => {
+  try {
+    const prompt = `
+      Act as an AI Career Coach.
+      Analyze the candidate's current skills: "${currentSkills.join(', ')}".
+      Target Role: "${targetRole}".
+      ${jobDescription ? `Job Description: "${jobDescription}"` : ''}
+
+      1. Calculate a match score (0-100).
+      2. Identify missing critical skills categorized by priority.
+      3. Provide a brief analysis of the gap.
+
+      Return JSON: { 
+        "matchScore": number, 
+        "missingSkills": [{ "skill": string, "priority": "High" | "Medium", "reason": string }], 
+        "analysis": string 
+      }
+    `;
+
+    // Updated to gemini-3-pro-preview for complex reasoning task
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-pro-preview',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            matchScore: { type: Type.NUMBER },
+            missingSkills: { 
+              type: Type.ARRAY, 
+              items: { 
+                type: Type.OBJECT, 
+                properties: {
+                  skill: { type: Type.STRING },
+                  priority: { type: Type.STRING, enum: ["High", "Medium"] },
+                  reason: { type: Type.STRING }
+                }
+              }
+            },
+            analysis: { type: Type.STRING }
+          }
+        }
+      }
+    });
+    return JSON.parse(response.text || "{}");
+  } catch (error) {
+    console.error(error);
+    return { matchScore: 50, missingSkills: [{ skill: "Advanced Tech", priority: "High", reason: "Required for role" }], analysis: "Unable to analyze at this moment." };
+  }
+};
+
+export const generatePersonalizedLearningPath = async (missingSkills: string[], role: string): Promise<any> => {
+  try {
+    const prompt = `
+      Create a 4-week intensive learning path to help an engineering student acquire these missing skills: "${missingSkills.join(', ')}".
+      Target Role: ${role}.
+
+      Structure it week by week. 
+      Also suggest a final capstone project.
+
+      Return JSON: { 
+        "weeks": [{ "week": number, "theme": string, "topics": string[], "practice": string }], 
+        "project": { "title": string, "description": string } 
+      }
+    `;
+
+    // Updated to gemini-3-flash-preview for structured text generation
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            weeks: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  week: { type: Type.INTEGER },
+                  theme: { type: Type.STRING },
+                  topics: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  practice: { type: Type.STRING }
+                }
+              }
+            },
+            project: {
+              type: Type.OBJECT,
+              properties: {
+                title: { type: Type.STRING },
+                description: { type: Type.STRING }
+              }
+            }
+          }
+        }
+      }
+    });
+    return JSON.parse(response.text || "{}");
+  } catch (error) {
+    console.error(error);
+    return {};
+  }
+};
+
 export const generateFlashcardsFromNotes = async (notes: string): Promise<any[]> => {
   try {
     const prompt = `
@@ -296,8 +516,9 @@ export const generateFlashcardsFromNotes = async (notes: string): Promise<any[]>
       Return JSON: [{ "question": string, "answer": string }]
     `;
 
+    // Updated to gemini-3-flash-preview for content extraction
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-flash-preview',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',

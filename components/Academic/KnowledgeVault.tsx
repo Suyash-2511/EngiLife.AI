@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   FileText, Plus, Search, Brain, Save, Trash2, 
   ChevronRight, RotateCw, Check, Zap, Sparkles, Book,
-  RotateCcw, ThumbsUp, ThumbsDown, Clock
+  RotateCcw, ThumbsUp, ThumbsDown, Clock, ArrowLeft
 } from 'lucide-react';
 import { Card } from '../Shared/Card';
 import { Button } from '../Shared/Button';
@@ -24,30 +25,37 @@ const FlashcardPlayer = ({ cards, onClose, onComplete }: FlashcardPlayerProps) =
   const [score, setScore] = useState(0);
   const [finished, setFinished] = useState(false);
 
+  // Spaced Repetition System (SRS) Algorithm (Modified SM-2)
   const calculateNextReview = (card: Flashcard, rating: 'again' | 'hard' | 'good' | 'easy') => {
     let interval = card.interval || 0;
     let ease = card.easeFactor || 2.5;
     let reviews = card.reviews || 0;
 
-    // Algorithm based on simplified SM-2
     if (rating === 'again') {
-      interval = 0; // Reset progress, review tomorrow (or immediately in a real app, but here 0 means "soon")
+      // Needs Review: Fail grade. Reset interval.
+      interval = 0; 
       ease = Math.max(1.3, ease - 0.2);
     } else if (rating === 'hard') {
+      // Hard: Pass but difficult. Small interval increase.
       interval = interval === 0 ? 1 : interval * 1.2;
       ease = Math.max(1.3, ease - 0.15);
     } else if (rating === 'good') {
+      // Good: Standard pass.
       interval = interval === 0 ? 1 : interval * ease;
     } else if (rating === 'easy') {
+      // Easy: Bright pass. Bonus interval.
       interval = interval === 0 ? 4 : interval * ease * 1.3;
       ease += 0.15;
     }
 
-    // Cap interval if needed, or format
-    interval = Math.round(interval * 10) / 10; // 1 decimal place
-
+    // Rounding and minimums
+    interval = Math.round(interval * 10) / 10;
+    
+    // Calculate next due date
     const nextDueDate = new Date();
-    nextDueDate.setDate(nextDueDate.getDate() + (interval === 0 ? 1 : interval)); // If 0, at least 1 day for this simple app
+    // If interval is 0 (Needs Review), set due date to tomorrow (1 day) or same day logic depending on strictness
+    // Here we use 1 day minimum for any review unless it's immediate re-queue (not implemented in this linear session)
+    nextDueDate.setDate(nextDueDate.getDate() + (interval < 1 ? 1 : interval));
 
     return {
       ...card,
@@ -84,10 +92,9 @@ const FlashcardPlayer = ({ cards, onClose, onComplete }: FlashcardPlayerProps) =
   };
 
   const getIntervalLabel = (rating: 'again' | 'hard' | 'good' | 'easy') => {
-      // Just a prediction for the UI
       const dummy = calculateNextReview(sessionCards[index], rating);
       const days = dummy.interval || 1;
-      return days < 1 ? '< 1d' : `${Math.round(days)}d`;
+      return days < 1 ? '1d' : `${Math.round(days)}d`;
   };
 
   if (finished) {
@@ -158,7 +165,7 @@ const FlashcardPlayer = ({ cards, onClose, onComplete }: FlashcardPlayerProps) =
                  onClick={() => handleRating('again')}
                  className="flex flex-col items-center justify-center p-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-rose-400 transition-all hover:scale-105 border-t-4 border-rose-500"
                >
-                  <span className="text-sm font-bold mb-1">Again</span>
+                  <span className="text-sm font-bold mb-1">Needs Review</span>
                   <span className="text-xs opacity-60">{getIntervalLabel('again')}</span>
                </button>
                <button 
@@ -215,6 +222,9 @@ export const KnowledgeVault: React.FC = () => {
   const handleCreateNote = () => {
      addNote('New Note', '');
      setIsEditing(true);
+     // On mobile, automatically selecting the new note is handled by the effect of adding it,
+     // but we rely on the user clicking it or we could auto-select the latest one.
+     // For simplicity, we just add it to the list.
   };
 
   useEffect(() => {
@@ -254,7 +264,7 @@ export const KnowledgeVault: React.FC = () => {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-140px)]">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100dvh-140px)]">
       {playingFlashcards && selectedNote && (
         <FlashcardPlayer 
           cards={selectedNote.flashcards} 
@@ -269,8 +279,8 @@ export const KnowledgeVault: React.FC = () => {
         />
       )}
 
-      {/* Sidebar List */}
-      <div className="lg:col-span-3 flex flex-col h-full gap-4">
+      {/* Sidebar List - Hidden on Mobile if note selected */}
+      <div className={`lg:col-span-3 flex flex-col h-full gap-4 ${selectedNoteId ? 'hidden lg:flex' : 'flex'}`}>
         <Button onClick={handleCreateNote} icon={<Plus size={18} />} className="w-full">New Note</Button>
         <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
            {notes.length === 0 && <div className="text-center text-slate-400 text-sm mt-10">No notes yet</div>}
@@ -298,28 +308,37 @@ export const KnowledgeVault: React.FC = () => {
         </div>
       </div>
 
-      {/* Editor Area */}
-      <div className="lg:col-span-9 h-full flex flex-col">
+      {/* Editor Area - Hidden on Mobile if NO note selected */}
+      <div className={`lg:col-span-9 h-full flex flex-col ${!selectedNoteId ? 'hidden lg:flex' : 'flex'}`}>
         {selectedNote ? (
            <Card noPadding className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-slate-900 shadow-xl border border-slate-200 dark:border-slate-800">
               {/* Toolbar */}
               <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-950">
+                 {/* Mobile Back Button */}
+                 <button 
+                    onClick={() => setSelectedNoteId(null)}
+                    className="lg:hidden mr-3 p-2 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg"
+                 >
+                    <ArrowLeft size={18} />
+                 </button>
+
                  <div className="flex-1 mr-4">
                     <input 
                       value={editTitle}
                       onChange={(e) => setEditTitle(e.target.value)}
                       placeholder="Note Title"
-                      className="bg-transparent text-xl font-bold text-slate-900 dark:text-white outline-none w-full placeholder:text-slate-400"
+                      className="bg-transparent text-lg md:text-xl font-bold text-slate-900 dark:text-white outline-none w-full placeholder:text-slate-400"
                     />
                  </div>
-                 <div className="flex items-center gap-2">
+                 <div className="flex items-center gap-1 md:gap-2">
                     {selectedNote.flashcards.length > 0 && (
-                       <Button variant="secondary" onClick={() => setPlayingFlashcards(true)} icon={<Brain size={16} className="text-primary-500" />}>
-                          Study ({selectedNote.flashcards.length})
+                       <Button size="sm" variant="secondary" onClick={() => setPlayingFlashcards(true)} icon={<Brain size={16} className="text-primary-500" />}>
+                          <span className="hidden md:inline">Study</span> ({selectedNote.flashcards.length})
                        </Button>
                     )}
                     <Button 
                        variant="ghost" 
+                       size="sm"
                        onClick={handleGenerateCards} 
                        disabled={isGenerating || !editContent}
                        className="text-indigo-600 dark:text-indigo-400"
@@ -327,7 +346,7 @@ export const KnowledgeVault: React.FC = () => {
                     >
                        {isGenerating ? <RotateCw className="animate-spin" size={18} /> : <Sparkles size={18} />}
                     </Button>
-                    <Button variant="ghost" onClick={handleSave} className="text-emerald-600 dark:text-emerald-400">
+                    <Button variant="ghost" size="sm" onClick={handleSave} className="text-emerald-600 dark:text-emerald-400">
                        <Save size={18} />
                     </Button>
                     <button 
@@ -343,7 +362,7 @@ export const KnowledgeVault: React.FC = () => {
               <textarea 
                  value={editContent}
                  onChange={(e) => setEditContent(e.target.value)}
-                 className="flex-1 w-full p-8 resize-none outline-none bg-transparent text-slate-800 dark:text-slate-200 leading-relaxed text-base font-mono focus:bg-slate-50/50 dark:focus:bg-slate-900/50 transition-colors"
+                 className="flex-1 w-full p-4 md:p-8 resize-none outline-none bg-transparent text-slate-800 dark:text-slate-200 leading-relaxed text-sm md:text-base font-mono focus:bg-slate-50/50 dark:focus:bg-slate-900/50 transition-colors"
                  placeholder="Start typing your notes here (Markdown supported)..."
               />
               

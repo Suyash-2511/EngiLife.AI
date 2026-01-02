@@ -1,102 +1,86 @@
-import React, { useState, useEffect } from 'react';
-import { BookOpen, Heart, Briefcase, ChevronRight, X, Sparkles } from 'lucide-react';
+import React, { useState } from 'react';
+import { BookOpen, Plus, ArrowRight, X } from 'lucide-react';
+import { Card } from '../Shared/Card';
+import { Button } from '../Shared/Button';
+import { useAppContext } from '../../context/AppContext';
+import { motion } from 'framer-motion';
 
-interface OnboardingTutorialProps {
-  onComplete: () => void;
-}
+export const OnboardingTutorial: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
+  const { addSubject } = useAppContext();
+  const [subjects, setSubjects] = useState<string[]>([]);
+  const [newSubject, setNewSubject] = useState('');
 
-export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({ onComplete }) => {
-  const [step, setStep] = useState(0);
-
-  const steps = [
-    {
-      title: "Welcome to EngiLife",
-      subtitle: "Your Integrated Engineering Ecosystem",
-      description: "Streamline your entire student lifecycle—from academic problem-solving to career placement—in one intelligent platform.",
-      icon: <Sparkles size={48} className="text-blue-600" />,
-      bg: "bg-blue-50"
-    },
-    {
-      title: "Academic Enablement",
-      subtitle: "Master the Curriculum",
-      description: "Access dynamic study planners, AI-driven concept clarification, and automated lab manual generation tailored to your branch.",
-      icon: <BookOpen size={48} className="text-indigo-600" />,
-      bg: "bg-indigo-50"
-    },
-    {
-      title: "Life Management",
-      subtitle: "Balance the Grind",
-      description: "Optimize your daily operations with wellness guidance, expense tracking, and hostel utility management.",
-      icon: <Heart size={48} className="text-rose-600" />,
-      bg: "bg-rose-50"
-    },
-    {
-      title: "Career Acceleration",
-      subtitle: "Future-Proof Your Skills",
-      description: "Prepare for placements with our resume builder, mock interview tools, and industry-aligned skill pathing.",
-      icon: <Briefcase size={48} className="text-emerald-600" />,
-      bg: "bg-emerald-50"
-    }
-  ];
-
-  const handleNext = () => {
-    if (step < steps.length - 1) {
-      setStep(step + 1);
-    } else {
-      onComplete();
+  const handleAddSubject = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newSubject.trim() && !subjects.includes(newSubject.trim())) {
+      setSubjects([...subjects, newSubject.trim()]);
+      setNewSubject('');
     }
   };
 
+  const handleRemoveSubject = (sub: string) => {
+    setSubjects(subjects.filter(s => s !== sub));
+  };
+
+  const handleFinish = () => {
+    subjects.forEach(sub => addSubject(sub, 75)); // Default 75% target
+    onComplete();
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 transition-all">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden flex flex-col relative animate-in fade-in zoom-in duration-300">
-        <button 
-          onClick={onComplete}
-          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
-        >
-          <X size={20} />
-        </button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/90 p-4 backdrop-blur-md">
+      <motion.div 
+         initial={{ opacity: 0, scale: 0.9 }}
+         animate={{ opacity: 1, scale: 1 }}
+         className="w-full max-w-lg"
+      >
+        <Card className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl">
+           <div className="text-center mb-8">
+              <div className="w-16 h-16 bg-primary-100 dark:bg-primary-900/30 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                 <BookOpen size={32} className="text-primary-600 dark:text-primary-400" />
+              </div>
+              <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-2">Let's get you set up</h2>
+              <p className="text-slate-500 text-sm">Add your current semester subjects to initialize the Attendance Tracker and AI Tutor.</p>
+           </div>
 
-        {/* Visual Header */}
-        <div className={`h-48 ${steps[step].bg} flex items-center justify-center transition-colors duration-500`}>
-          <div className="bg-white p-6 rounded-full shadow-sm shadow-indigo-100 transform transition-transform duration-500 hover:scale-110">
-            {steps[step].icon}
-          </div>
-        </div>
+           <div className="space-y-4 mb-8">
+              <form onSubmit={handleAddSubject} className="flex gap-2">
+                 <input 
+                   value={newSubject}
+                   onChange={e => setNewSubject(e.target.value)}
+                   placeholder="e.g. Data Structures"
+                   className="flex-1 px-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-primary-500/50"
+                   autoFocus
+                 />
+                 <Button type="submit" icon={<Plus size={20} />} className="w-12 h-full !p-0 flex items-center justify-center" />
+              </form>
 
-        {/* Content Body */}
-        <div className="p-8 text-center flex-1 flex flex-col justify-between">
-          <div className="space-y-3">
-            <h2 className="text-2xl font-bold text-gray-900 tracking-tight">{steps[step].title}</h2>
-            <h3 className="text-sm font-semibold text-blue-600 uppercase tracking-wide">{steps[step].subtitle}</h3>
-            <p className="text-gray-600 leading-relaxed text-sm">
-              {steps[step].description}
-            </p>
-          </div>
+              <div className="flex flex-wrap gap-2 min-h-[100px] content-start">
+                 {subjects.length === 0 && (
+                    <div className="w-full text-center text-slate-400 text-xs italic py-4">
+                       No subjects added yet.
+                    </div>
+                 )}
+                 {subjects.map(sub => (
+                    <motion.span 
+                      key={sub}
+                      layout
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-bold flex items-center gap-2"
+                    >
+                       {sub}
+                       <button onClick={() => handleRemoveSubject(sub)} className="text-slate-400 hover:text-rose-500"><X size={14} /></button>
+                    </motion.span>
+                 ))}
+              </div>
+           </div>
 
-          <div className="mt-8 space-y-6">
-            {/* Dots Indicator */}
-            <div className="flex justify-center gap-2">
-              {steps.map((_, i) => (
-                <div 
-                  key={i} 
-                  className={`h-2 rounded-full transition-all duration-300 ${
-                    i === step ? 'w-8 bg-blue-600' : 'w-2 bg-gray-200'
-                  }`} 
-                />
-              ))}
-            </div>
-
-            <button
-              onClick={handleNext}
-              className="w-full py-3.5 bg-gray-900 text-white rounded-xl font-medium shadow-lg shadow-gray-200 hover:shadow-xl hover:bg-black transition-all flex items-center justify-center gap-2 group"
-            >
-              {step === steps.length - 1 ? "Get Started" : "Continue"}
-              <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
-            </button>
-          </div>
-        </div>
-      </div>
+           <Button onClick={handleFinish} className="w-full py-3.5" disabled={subjects.length === 0}>
+              Complete Setup <ArrowRight size={18} />
+           </Button>
+        </Card>
+      </motion.div>
     </div>
   );
 };

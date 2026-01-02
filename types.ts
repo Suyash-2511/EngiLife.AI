@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 export enum AppRoute {
@@ -18,6 +19,14 @@ export interface NavItem {
   icon: React.ReactNode;
 }
 
+export type WidgetId = 'stats_overview' | 'productivity' | 'tasks' | 'schedule' | 'quick_notes' | 'ai_assistant' | 'attendance_detail';
+
+export interface DashboardWidget {
+  id: WidgetId;
+  label: string;
+  enabled: boolean;
+}
+
 export interface Achievement {
   id: string;
   title: string;
@@ -27,10 +36,28 @@ export interface Achievement {
   dateUnlocked?: string;
 }
 
+export interface Project {
+  id: string;
+  title: string;
+  description: string;
+  techStack: string[];
+  link?: string;
+}
+
+export interface Experience {
+  id: string;
+  role: string;
+  company: string;
+  duration: string;
+  description: string;
+  type: 'Internship' | 'Full-time' | 'Part-time' | 'Freelance';
+}
+
 export interface User {
   id: string;
   name: string;
   email: string;
+  emailVerified?: boolean;
   university?: string;
   branch?: string;
   semester?: number;
@@ -39,10 +66,25 @@ export interface User {
   joinedDate: string;
   xp: number;
   level: number;
+  cgpa?: number;
+  streak: number;
+  lastStreakUpdate?: string;
+  skills?: string[];
+  projects?: Project[];
+  experience?: Experience[];
+  socialLinks?: {
+    github?: string;
+    linkedin?: string;
+    website?: string;
+    twitter?: string;
+  };
   achievements: Achievement[];
   security: {
     twoFactorEnabled: boolean;
     lastLogin: string;
+  };
+  preferences?: {
+    budgetLimit: number;
   };
 }
 

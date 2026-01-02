@@ -1,27 +1,51 @@
-# EngiLife: Student Ecosystem
+# EngiLife Backend
 
-An integrated AI-powered ecosystem for engineering students, combining academic tools, life management, and career preparation.
+Production-ready backend for the EngiLife ecosystem.
 
-## Repository
-[https://github.com/Suyash2527/EngiLife.AI](https://github.com/Suyash2527/EngiLife.AI)
+## Setup
 
-## Features
-- **Dashboard**: Centralized hub for tasks, schedule, and academic progress.
-- **Academic**: 
-  - AI Tutor (Study Companion)
-  - Lab Manual Generator
-  - Attendance Tracker with Bunk Simulator
-  - Knowledge Vault (Notes + AI Flashcards with SRS)
-- **Life**: 
-  - Budget Tracker
-  - Wellness & Habit Tracking
-- **Career**: 
-  - AI Resume Enhancer
-  - Mock Interview Simulator
-  - Career Roadmap Generator
+1. **Install Dependencies**
+   ```bash
+   cd backend
+   npm install
+   ```
 
-## Tech Stack
-- **Frontend**: React 18, TypeScript, Vite
-- **Styling**: Tailwind CSS, Framer Motion, Lucide React
-- **AI**: Google Gemini API (@google/genai)
-- **Charts**: Recharts
+2. **Environment**
+   Create a `.env` file in `backend/`:
+   ```env
+   DATABASE_URL="postgresql://engilife:password@localhost:5432/engilife_db"
+   JWT_SECRET="dev_secret_key"
+   PORT=3001
+   ```
+
+3. **Database (Docker)**
+   Start the database:
+   ```bash
+   docker-compose up -d postgres
+   ```
+
+4. **Run Migrations**
+   ```bash
+   cd backend
+   npx prisma db push
+   ```
+
+5. **Start Server**
+   ```bash
+   npm run dev
+   ```
+
+## API Documentation
+
+- **Auth**:
+  - `POST /api/auth/signup`: Create account
+  - `POST /api/auth/login`: Get JWT token
+  - `POST /api/auth/verify-email`: Verify account (code: 1234)
+- **Resources** (Requires `Authorization: Bearer <token>`):
+  - `GET /api/tasks`, `POST /api/tasks`, etc.
+  - Resources: `tasks`, `subjects`, `schedule`, `notes`, `habits`, `savingsGoals`
+
+## Production Deployment
+
+Use the provided `Dockerfile` and `docker-compose.yml`.
+Ensure `DATABASE_URL` points to your production RDS/Postgres instance.

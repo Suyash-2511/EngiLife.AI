@@ -1,10 +1,14 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Subject, Task, ScheduleItem, Reminder, AppNotification, Habit, User, Achievement, Note, Flashcard, SavingsGoal } from '../types';
+
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { Subject, Task, ScheduleItem, Reminder, AppNotification, Habit, User, Achievement, Note, SavingsGoal, DashboardWidget, Expense } from '../types';
 import { generateStudyPlan } from '../services/gemini';
+import { api } from '../services/api';
 
 interface AppContextType {
   user: User | null;
   setUser: (user: any) => void;
+  isLoading: boolean; // Auth loading
+  isDataLoading: boolean; // Data fetching loading
   updateUserProfile: (updates: Partial<User>) => void;
   subjects: Subject[];
   addSubject: (name: string, target: number, attended?: number, total?: number) => void;
@@ -30,9 +34,11 @@ interface AppContextType {
   notifications: AppNotification[];
   markNotificationRead: (id: string) => void;
   clearNotifications: () => void;
-  // Life & Wallet
   budgetLimit: number;
   setBudgetLimit: (limit: number) => void;
+  expenses: Expense[];
+  addExpense: (expense: Expense) => void;
+  deleteExpense: (id: string) => void;
   habits: Habit[];
   addHabit: (name: string) => void;
   toggleHabit: (id: string) => void;
@@ -41,378 +47,407 @@ interface AppContextType {
   addSavingsGoal: (goal: SavingsGoal) => void;
   updateSavingsGoal: (id: string, amount: number) => void;
   deleteSavingsGoal: (id: string) => void;
-  // Vault
   notes: Note[];
   addNote: (title: string, content: string) => void;
   updateNote: (id: string, updates: Partial<Note>) => void;
   deleteNote: (id: string) => void;
   awardXP: (amount: number) => void;
+  // Widget State
+  dashboardWidgets: DashboardWidget[];
+  updateDashboardWidgets: (widgets: DashboardWidget[]) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const INITIAL_ACHIEVEMENTS: Achievement[] = [
-  { id: '1', title: 'Task Slayer', description: 'Complete 10 tasks', icon: 'CheckCircle', unlocked: false },
-  { id: '2', title: 'Perfect Week', description: 'Maintain 100% attendance for a week', icon: 'Calendar', unlocked: false },
-  { id: '3', title: 'Night Owl', description: 'Complete a study session after 10 PM', icon: 'Moon', unlocked: true, dateUnlocked: '2023-10-15' },
-  { id: '4', title: 'Big Spender', description: 'Track an expense over ₹1000', icon: 'Wallet', unlocked: false },
+const DEFAULT_WIDGETS: DashboardWidget[] = [
+  { id: 'stats_overview', label: 'Stats Overview', enabled: true },
+  { id: 'tasks', label: 'Upcoming Deadlines', enabled: true },
+  { id: 'schedule', label: 'Today\'s Schedule', enabled: true },
+  { id: 'productivity', label: 'Task Priority Chart', enabled: true },
+  { id: 'attendance_detail', label: 'Course Progress', enabled: true },
+  { id: 'quick_notes', label: 'Quick Notes', enabled: false },
+  { id: 'ai_assistant', label: 'AI Assistant', enabled: false },
 ];
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // User State
+  const [isLoading, setIsLoading] = useState(true); // Auth loading
+  const [isDataLoading, setIsDataLoading] = useState(false); // Content loading
   const [user, setUserState] = useState<User | null>(null);
 
-  // Wrapper to handle raw user object from login and ensure structure
+  // Data States
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [habits, setHabits] = useState<Habit[]>([]);
+  const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  
+  // Dashboard Widget State
+  const [dashboardWidgets, setDashboardWidgets] = useState<DashboardWidget[]>(DEFAULT_WIDGETS);
+  
+  // Local Only States (Non-Persistent for now or simple localstorage)
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [budgetLimit, setBudgetLimitState] = useState(5000);
+  const [isGeneratingSchedule, setIsGeneratingSchedule] = useState(false);
+
+  // --- Initialization & Data Fetching ---
+  useEffect(() => {
+    const initApp = async () => {
+      setIsLoading(true);
+      const token = localStorage.getItem('auth_token');
+      
+      // Load widgets
+      const storedWidgets = localStorage.getItem('engiLife_widgets');
+      if (storedWidgets) {
+          try {
+             const parsed = JSON.parse(storedWidgets);
+             if (Array.isArray(parsed)) setDashboardWidgets(parsed);
+          } catch(e) {
+             console.warn("Failed to parse stored widgets, using defaults.");
+          }
+      }
+
+      if (token) {
+         try {
+             // Verify session with backend to get FRESH user data
+             const freshUser = await api.auth.verifySession();
+             setUserState(freshUser);
+             
+             // Sync budget limit from user profile if exists
+             if (freshUser.preferences?.budgetLimit) {
+                 setBudgetLimitState(freshUser.preferences.budgetLimit);
+             }
+             
+             // Auth success, stop blocking UI
+             setIsLoading(false); 
+
+             // Now fetch data
+             setIsDataLoading(true);
+             await loadAllData();
+             setIsDataLoading(false);
+
+         } catch(e) {
+             console.error("Session verification failed", e);
+             api.auth.logout();
+             setUserState(null);
+             setIsLoading(false);
+         }
+      } else {
+          setIsLoading(false);
+      }
+    };
+    initApp();
+  }, []);
+
+  const loadAllData = async () => {
+     try {
+         const [fetchedTasks, fetchedSubjects, fetchedSchedule, fetchedNotes, fetchedHabits, fetchedGoals, fetchedExpenses] = await Promise.all([
+             api.tasks.list(),
+             api.subjects.list(),
+             api.schedule.list(),
+             api.notes.list(),
+             api.habits.list(),
+             api.savingsGoals.list(),
+             api.expenses.list()
+         ]);
+
+         setTasks(Array.isArray(fetchedTasks) ? fetchedTasks : []);
+         setSubjects(Array.isArray(fetchedSubjects) ? fetchedSubjects : []);
+         setSchedule(Array.isArray(fetchedSchedule) ? fetchedSchedule : []);
+         setNotes(Array.isArray(fetchedNotes) ? fetchedNotes : []);
+         setHabits(Array.isArray(fetchedHabits) ? fetchedHabits : []);
+         setSavingsGoals(Array.isArray(fetchedGoals) ? fetchedGoals : []);
+         setExpenses(Array.isArray(fetchedExpenses) ? fetchedExpenses : []);
+
+     } catch (e) {
+         console.error("Failed to fetch data:", e);
+         // Fallback to empty arrays in case of total failure
+         setTasks([]); setSubjects([]); setSchedule([]); setNotes([]); setHabits([]); setSavingsGoals([]); setExpenses([]);
+     }
+  };
+
   const setUser = (userData: any) => {
     if (!userData) {
       setUserState(null);
+      api.auth.logout();
+      setTasks([]); setSubjects([]); setSchedule([]); setNotes([]); setExpenses([]);
       return;
     }
-    // Merge with default gamification structure if missing
-    setUserState({
-      id: userData.id || Date.now().toString(),
-      name: userData.name,
-      email: userData.email,
-      university: userData.university || 'Tech Institute',
-      branch: userData.branch || 'Computer Science',
-      semester: userData.semester || 1,
-      xp: userData.xp || 0,
-      level: userData.level || 1,
-      achievements: userData.achievements || INITIAL_ACHIEVEMENTS,
-      bio: userData.bio || 'Engineering student trying to survive.',
-      avatar: userData.avatar || `https://ui-avatars.com/api/?name=${userData.name}&background=random`,
-      joinedDate: userData.joinedDate || new Date().toLocaleDateString(),
-      security: userData.security || { twoFactorEnabled: false, lastLogin: new Date().toISOString() }
-    });
+    setUserState(userData);
+    
+    // Set budget limit if present in new user data
+    if (userData.preferences?.budgetLimit) {
+        setBudgetLimitState(userData.preferences.budgetLimit);
+    } else {
+        setBudgetLimitState(5000); // Default if not set
+    }
+
+    localStorage.setItem('engiLife_user', JSON.stringify(userData));
+    // Trigger data load on login
+    setIsDataLoading(true);
+    loadAllData().finally(() => setIsDataLoading(false));
   };
 
-  const updateUserProfile = (updates: Partial<User>) => {
+  const updateUserProfile = async (updates: Partial<User>) => {
     if (!user) return;
-    setUserState({ ...user, ...updates });
+    try {
+        const updatedUser = await api.auth.updateProfile(updates);
+        setUserState(updatedUser);
+    } catch (e) {
+        console.error(e);
+    }
+  };
+  
+  const updateDashboardWidgets = (widgets: DashboardWidget[]) => {
+      setDashboardWidgets(widgets);
+      localStorage.setItem('engiLife_widgets', JSON.stringify(widgets));
   };
 
-  const awardXP = (amount: number) => {
+  const awardXP = async (amount: number) => {
     if (!user) return;
     const newXP = user.xp + amount;
     const newLevel = Math.floor(newXP / 1000) + 1;
     
-    // Check level up
     if (newLevel > user.level) {
       setNotifications(prev => [{
-        id: Date.now().toString(),
-        title: 'Level Up!',
-        message: `Congratulations! You reached Level ${newLevel}`,
-        timestamp: Date.now(),
-        read: false,
-        type: 'success'
+        id: Date.now().toString(), title: 'Level Up!', message: `Congratulations! You reached Level ${newLevel}`, timestamp: Date.now(), read: false, type: 'success'
       }, ...prev]);
     }
-
-    setUserState({ ...user, xp: newXP, level: newLevel });
+    await updateUserProfile({ xp: newXP, level: newLevel });
   };
 
-  // Subjects State (Attendance)
-  const [subjects, setSubjects] = useState<Subject[]>([
-    { id: '1', name: 'Data Structures', attended: 24, total: 28, minPercent: 75, progress: 70, color: 'bg-primary-500' },
-    { id: '2', name: 'Thermodynamics', attended: 12, total: 18, minPercent: 75, progress: 45, color: 'bg-amber-500' },
-    { id: '3', name: 'Eng. Mathematics III', attended: 38, total: 40, minPercent: 80, progress: 85, color: 'bg-emerald-500' },
-    { id: '4', name: 'Digital Logic', attended: 15, total: 15, minPercent: 75, progress: 55, color: 'bg-blue-500' },
-  ]);
-
-  // Tasks State
-  const [tasks, setTasks] = useState<Task[]>([
-    { id: '1', title: 'Fluid Mechanics Assignment', priority: 'High', deadline: 'Today, 17:00', completed: false, category: 'Academic' },
-    { id: '2', title: 'Placement Mock Test', priority: 'Medium', deadline: 'Tomorrow', completed: false, category: 'Placement' },
-    { id: '3', title: 'Hostel Mess Fee', priority: 'High', deadline: 'Fri, Oct 24', completed: false, category: 'Personal' },
-  ]);
-
-  // Schedule State
-  const [schedule, setSchedule] = useState<ScheduleItem[]>([
-    { time: '09:00', activity: 'Data Structures', type: 'Lecture', location: '304', status: 'completed' },
-    { time: '11:00', activity: 'Physics Lab', type: 'Lab', location: 'Block B', status: 'current' },
-    { time: '14:00', activity: 'Library Session', type: 'Study', location: 'Central', status: 'upcoming' },
-  ]);
-  const [isGeneratingSchedule, setIsGeneratingSchedule] = useState(false);
-
-  // Reminders & Notifications
-  const [reminders, setReminders] = useState<Reminder[]>([
-    { id: '1', time: '17:00', label: 'Log Daily Attendance', enabled: true },
-    { id: '2', time: '21:00', label: 'Review tomorrow\'s schedule', enabled: true }
-  ]);
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
-
-  // Life Section
-  const [budgetLimit, setBudgetLimit] = useState(5000);
-  const [habits, setHabits] = useState<Habit[]>([
-    { id: '1', name: 'Drink 3L Water', streak: 4, completedToday: false },
-    { id: '2', name: 'Solve 1 LeetCode', streak: 12, completedToday: true },
-    { id: '3', name: 'Read 20 mins', streak: 0, completedToday: false },
-  ]);
-  const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([
-    { id: '1', name: 'New Laptop', targetAmount: 60000, currentAmount: 15000, color: 'bg-blue-500', icon: 'Laptop' },
-    { id: '2', name: 'Semester Trip', targetAmount: 5000, currentAmount: 2000, color: 'bg-emerald-500', icon: 'Plane' }
-  ]);
-
-  // Knowledge Vault (Notes)
-  const [notes, setNotes] = useState<Note[]>([]);
-
-  // Persistence
-  useEffect(() => {
-    const storedUser = localStorage.getItem('engiLife_user');
-    if (storedUser) {
-        // Parse and ensure structure
-        const parsed = JSON.parse(storedUser);
-        setUser(parsed);
-    }
-
-    const storedNotes = localStorage.getItem('engiLife_notes');
-    if (storedNotes) setNotes(JSON.parse(storedNotes));
-    
-    // Request notification permission on load
-    if ("Notification" in window) {
-      if (Notification.permission !== "granted" && Notification.permission !== "denied") {
-        Notification.requestPermission();
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    if (user) localStorage.setItem('engiLife_user', JSON.stringify(user));
-    else localStorage.removeItem('engiLife_user');
-  }, [user]);
-
-  useEffect(() => {
-    localStorage.setItem('engiLife_notes', JSON.stringify(notes));
-  }, [notes]);
-
-  // Check habits reset on new day
-  useEffect(() => {
-    const today = new Date().toDateString();
-    setHabits(prev => prev.map(habit => {
-      if (habit.lastCompletedDate && habit.lastCompletedDate !== today) {
-        return { ...habit, completedToday: false };
-      }
-      return habit;
-    }));
-  }, []);
-
-  // Reminder Logic Loop
-  useEffect(() => {
-    const checkReminders = () => {
-      const now = new Date();
-      const currentTime = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
-      const todayDate = now.toDateString();
-
-      setReminders(prevReminders => {
-        let hasUpdates = false;
-        const updatedReminders = prevReminders.map(reminder => {
-          if (reminder.enabled && reminder.time === currentTime && reminder.lastTriggered !== todayDate) {
-            const newNotification: AppNotification = {
-              id: Date.now().toString(),
-              title: 'Reminder',
-              message: reminder.label,
-              timestamp: Date.now(),
-              read: false,
-              type: 'reminder'
-            };
-            setNotifications(prev => [newNotification, ...prev]);
-            if ("Notification" in window && Notification.permission === "granted") {
-              new Notification("EngiLife Reminder", { body: reminder.label });
+  // --- CRUD Functions ---
+  const addSubject = async (name: string, target: number, attended: number = 0, total: number = 0) => {
+    try {
+        const newSubject = { id: Date.now().toString(), name, attended, total, minPercent: target, progress: 0, color: 'bg-slate-500' };
+        const saved = await api.subjects.create(newSubject);
+        setSubjects(prev => [...prev, saved]);
+    } catch(e) { console.error(e); }
+  };
+  const updateAttendance = async (id: string, present: boolean) => {
+    const subject = subjects.find(s => s.id === id);
+    if (!subject) return;
+    try {
+        const updates = { attended: present ? subject.attended + 1 : subject.attended, total: subject.total + 1 };
+        const updated = await api.subjects.update(id, updates);
+        setSubjects(prev => prev.map(s => s.id === id ? updated : s));
+        if (present) awardXP(10);
+    } catch(e) { console.error(e); }
+  };
+  const updateSubjectStats = async (id: string, attended: number, total: number) => {
+    try {
+        const updated = await api.subjects.update(id, { attended, total });
+        setSubjects(prev => prev.map(s => s.id === id ? updated : s));
+    } catch(e) { console.error(e); }
+  };
+  const deleteSubject = async (id: string) => {
+    try {
+        await api.subjects.delete(id);
+        setSubjects(prev => prev.filter(s => s.id !== id));
+    } catch(e) { console.error(e); }
+  };
+  const addTask = async (task: Task) => {
+    try {
+        const saved = await api.tasks.create(task);
+        setTasks(prev => [...prev, saved]);
+    } catch(e) { console.error(e); }
+  };
+  const updateTask = async (id: string, updates: Partial<Task>) => {
+    try {
+        const updated = await api.tasks.update(id, updates);
+        setTasks(prev => prev.map(t => t.id === id ? updated : t));
+    } catch(e) { console.error(e); }
+  };
+  const deleteTask = async (id: string) => {
+    try {
+        await api.tasks.delete(id);
+        setTasks(prev => prev.filter(t => t.id !== id));
+    } catch(e) { console.error(e); }
+  };
+  const toggleTaskCompletion = async (id: string) => {
+    const task = tasks.find(t => t.id === id);
+    if(!task) return;
+    try {
+        const updated = await api.tasks.update(id, { completed: !task.completed });
+        setTasks(prev => prev.map(t => t.id === id ? updated : t));
+        if (!task.completed) awardXP(50);
+    } catch(e) { console.error(e); }
+  };
+  const cycleTaskPriority = async (id: string) => {
+    const task = tasks.find(t => t.id === id);
+    if(!task) return;
+    const priorities: Task['priority'][] = ['Low', 'Medium', 'High'];
+    const nextPriority = priorities[(priorities.indexOf(task.priority) + 1) % 3];
+    try {
+        const updated = await api.tasks.update(id, { priority: nextPriority });
+        setTasks(prev => prev.map(t => t.id === id ? updated : t));
+    } catch(e) { console.error(e); }
+  };
+  const addScheduleItem = async (item: ScheduleItem) => {
+    try {
+        const itemWithId = { ...item, id: item.id || Date.now().toString() };
+        const saved = await api.schedule.create(itemWithId);
+        setSchedule(prev => [...prev, saved].sort((a, b) => a.time.localeCompare(b.time)));
+    } catch(e) { console.error(e); }
+  };
+  const updateScheduleItem = async (index: number, item: ScheduleItem) => {
+      if (!item.id) return; 
+      try {
+          const updated = await api.schedule.update(item.id, item);
+          setSchedule(prev => {
+              const newSchedule = [...prev];
+              newSchedule[index] = updated;
+              return newSchedule.sort((a, b) => a.time.localeCompare(b.time));
+          });
+      } catch(e) { console.error(e); }
+  };
+  const deleteScheduleItem = async (index: number) => {
+      const item = schedule[index];
+      if (!item.id) return;
+      try {
+          await api.schedule.delete(item.id);
+          setSchedule(prev => prev.filter((_, i) => i !== index));
+      } catch(e) { console.error(e); }
+  };
+  const generateSmartSchedule = async () => {
+    setIsGeneratingSchedule(true);
+    try {
+        const aiSchedule = await generateStudyPlan(subjects.map(s => s.name), tasks.filter(t => !t.completed).map(t => t.title), 8);
+        if (aiSchedule?.length) {
+            const newItems = [];
+            for (const item of aiSchedule) {
+                const saved = await api.schedule.create({ ...item, id: Date.now().toString() + Math.random() });
+                newItems.push(saved);
             }
-            hasUpdates = true;
-            return { ...reminder, lastTriggered: todayDate };
-          }
-          return reminder;
+            setSchedule(prev => [...prev, ...newItems].sort((a,b) => a.time.localeCompare(b.time)));
+        }
+    } catch(e) { console.error(e); }
+    setIsGeneratingSchedule(false);
+  };
+  const addNote = async (title: string, content: string) => {
+      try {
+          const newNote = { id: Date.now().toString(), title: title || 'Untitled', content, lastModified: new Date().toLocaleDateString(), tags: [], flashcards: [] };
+          const saved = await api.notes.create(newNote);
+          setNotes(prev => [saved, ...prev]);
+      } catch(e) { console.error(e); }
+  };
+  const updateNote = async (id: string, updates: Partial<Note>) => {
+      try {
+          const updated = await api.notes.update(id, { ...updates, lastModified: new Date().toLocaleDateString() });
+          setNotes(prev => prev.map(n => n.id === id ? updated : n));
+      } catch(e) { console.error(e); }
+  };
+  const deleteNote = async (id: string) => {
+      try {
+          await api.notes.delete(id);
+          setNotes(prev => prev.filter(n => n.id !== id));
+      } catch(e) { console.error(e); }
+  };
+  const addHabit = async (name: string) => {
+      try {
+          const newHabit = { id: Date.now().toString(), name, streak: 0, completedToday: false };
+          const saved = await api.habits.create(newHabit);
+          setHabits(prev => [...prev, saved]);
+      } catch(e) { console.error(e); }
+  };
+  const toggleHabit = async (id: string) => {
+      const habit = habits.find(h => h.id === id);
+      if(!habit) return;
+      const today = new Date().toDateString();
+      try {
+          const updates = { 
+              completedToday: !habit.completedToday,
+              streak: !habit.completedToday ? habit.streak + 1 : habit.streak,
+              lastCompletedDate: !habit.completedToday ? today : habit.lastCompletedDate
+          };
+          const updated = await api.habits.update(id, updates);
+          setHabits(prev => prev.map(h => h.id === id ? updated : h));
+          if (!habit.completedToday) awardXP(25);
+      } catch(e) { console.error(e); }
+  };
+  const deleteHabit = async (id: string) => {
+      try {
+          await api.habits.delete(id);
+          setHabits(prev => prev.filter(h => h.id !== id));
+      } catch(e) { console.error(e); }
+  };
+  const addSavingsGoal = async (goal: SavingsGoal) => {
+      try {
+          const saved = await api.savingsGoals.create(goal);
+          setSavingsGoals(prev => [...prev, saved]);
+      } catch(e) { console.error(e); }
+  };
+  const updateSavingsGoal = async (id: string, amount: number) => {
+      try {
+          const updated = await api.savingsGoals.update(id, { currentAmount: amount });
+          setSavingsGoals(prev => prev.map(g => g.id === id ? updated : g));
+      } catch(e) { console.error(e); }
+  };
+  const deleteSavingsGoal = async (id: string) => {
+      try {
+          await api.savingsGoals.delete(id);
+          setSavingsGoals(prev => prev.filter(g => g.id !== id));
+      } catch(e) { console.error(e); }
+  };
+  const addExpense = async (expense: Expense) => {
+      try {
+          const saved = await api.expenses.create(expense);
+          setExpenses(prev => [...prev, saved]);
+      } catch(e) { console.error(e); }
+  };
+  const deleteExpense = async (id: string) => {
+      try {
+          await api.expenses.delete(id);
+          setExpenses(prev => prev.filter(e => e.id !== id));
+      } catch(e) { console.error(e); }
+  };
+
+  const addReminder = (time: string, label: string) => setReminders(prev => [...prev, { id: Date.now().toString(), time, label, enabled: true }]);
+  const deleteReminder = (id: string) => setReminders(prev => prev.filter(r => r.id !== id));
+  const toggleReminder = (id: string) => setReminders(prev => prev.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r));
+  const markNotificationRead = (id: string) => setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+  const clearNotifications = () => setNotifications([]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+        const now = new Date();
+        const currentTime = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+        const todayDate = now.toDateString();
+        
+        setReminders(prevReminders => {
+            let hasUpdates = false;
+            const updated = prevReminders.map(r => {
+                if (r.enabled && r.time === currentTime && r.lastTriggered !== todayDate) {
+                    setNotifications(prev => [{ id: Date.now().toString(), title: 'Reminder', message: r.label, timestamp: Date.now(), read: false, type: 'reminder' }, ...prev]);
+                    hasUpdates = true;
+                    return { ...r, lastTriggered: todayDate };
+                }
+                return r;
+            });
+            return hasUpdates ? updated : prevReminders;
         });
-        return hasUpdates ? updatedReminders : prevReminders;
-      });
-    };
-    const timer = setInterval(checkReminders, 10000);
+    }, 10000);
     return () => clearInterval(timer);
   }, []);
 
-  // Actions - Subjects
-  const addSubject = (name: string, target: number, attended: number = 0, total: number = 0) => {
-    setSubjects([...subjects, {
-      id: Date.now().toString(),
-      name,
-      attended,
-      total,
-      minPercent: target,
-      progress: 0,
-      color: 'bg-slate-500'
-    }]);
-  };
-
-  const updateAttendance = (id: string, present: boolean) => {
-    if (present) awardXP(10); // Gamification Hook
-    setSubjects(prev => prev.map(sub => 
-      sub.id === id ? { ...sub, attended: present ? sub.attended + 1 : sub.attended, total: sub.total + 1 } : sub
-    ));
-  };
-
-  const updateSubjectStats = (id: string, attended: number, total: number) => {
-    setSubjects(prev => prev.map(sub => 
-      sub.id === id ? { ...sub, attended, total } : sub
-    ));
-  };
-
-  const deleteSubject = (id: string) => {
-    setSubjects(prev => prev.filter(sub => sub.id !== id));
-  };
-
-  // Actions - Tasks
-  const addTask = (task: Task) => setTasks([...tasks, task]);
-
-  const updateTask = (id: string, updates: Partial<Task>) => {
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
-  };
-
-  const deleteTask = (id: string) => {
-    setTasks(prev => prev.filter(t => t.id !== id));
-  };
-
-  const toggleTaskCompletion = (id: string) => {
-    setTasks(prev => prev.map(t => {
-      if (t.id === id) {
-        if (!t.completed) awardXP(50); // Gamification Hook: Task Done
-        return { ...t, completed: !t.completed };
+  const setBudgetLimit = (limit: number) => {
+      setBudgetLimitState(limit);
+      // Persist to user profile
+      if (user) {
+          updateUserProfile({
+              preferences: {
+                  ...user.preferences,
+                  budgetLimit: limit
+              }
+          });
       }
-      return t;
-    }));
-  };
-
-  const cycleTaskPriority = (id: string) => {
-    const priorities: Task['priority'][] = ['Low', 'Medium', 'High'];
-    setTasks(prev => prev.map(t => {
-      if (t.id === id) {
-        const currentIndex = priorities.indexOf(t.priority);
-        const nextPriority = priorities[(currentIndex + 1) % 3];
-        return { ...t, priority: nextPriority };
-      }
-      return t;
-    }));
-  };
-
-  // Actions - Schedule
-  const addScheduleItem = (item: ScheduleItem) => {
-    setSchedule(prev => [...prev, item].sort((a, b) => a.time.localeCompare(b.time)));
-  };
-
-  const updateScheduleItem = (index: number, item: ScheduleItem) => {
-    const newSchedule = [...schedule];
-    newSchedule[index] = item;
-    setSchedule(newSchedule.sort((a, b) => a.time.localeCompare(b.time)));
-  };
-
-  const deleteScheduleItem = (index: number) => {
-    setSchedule(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const generateSmartSchedule = async () => {
-    setIsGeneratingSchedule(true);
-    const subjectNames = subjects.map(s => s.name);
-    const taskTitles = tasks.filter(t => !t.completed).map(t => t.title);
-    const aiSchedule = await generateStudyPlan(subjectNames, taskTitles, 8);
-    if (aiSchedule && aiSchedule.length > 0) {
-      setSchedule(aiSchedule);
-    }
-    setIsGeneratingSchedule(false);
-  };
-
-  // Actions - Reminders
-  const addReminder = (time: string, label: string) => {
-    setReminders(prev => [...prev, {
-      id: Date.now().toString(),
-      time,
-      label,
-      enabled: true
-    }]);
-  };
-
-  const deleteReminder = (id: string) => {
-    setReminders(prev => prev.filter(r => r.id !== id));
-  };
-
-  const toggleReminder = (id: string) => {
-    setReminders(prev => prev.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r));
-  };
-
-  const markNotificationRead = (id: string) => {
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
-  };
-
-  const clearNotifications = () => {
-    setNotifications([]);
-  };
-
-  // Actions - Habits & Savings
-  const addHabit = (name: string) => {
-    setHabits(prev => [...prev, {
-      id: Date.now().toString(),
-      name,
-      streak: 0,
-      completedToday: false
-    }]);
-  };
-
-  const toggleHabit = (id: string) => {
-    const today = new Date().toDateString();
-    setHabits(prev => prev.map(h => {
-      if (h.id === id) {
-        const wasCompleted = h.completedToday;
-        if (!wasCompleted) awardXP(25); // Gamification Hook: Habit
-        return {
-          ...h,
-          completedToday: !wasCompleted,
-          streak: wasCompleted ? h.streak : h.streak + 1, // Simple streak logic
-          lastCompletedDate: !wasCompleted ? today : h.lastCompletedDate
-        };
-      }
-      return h;
-    }));
-  };
-
-  const deleteHabit = (id: string) => {
-    setHabits(prev => prev.filter(h => h.id !== id));
-  };
-
-  const addSavingsGoal = (goal: SavingsGoal) => {
-    setSavingsGoals(prev => [...prev, goal]);
-  };
-
-  const updateSavingsGoal = (id: string, amount: number) => {
-    setSavingsGoals(prev => prev.map(g => g.id === id ? { ...g, currentAmount: amount } : g));
-  };
-
-  const deleteSavingsGoal = (id: string) => {
-    setSavingsGoals(prev => prev.filter(g => g.id !== id));
-  };
-
-  // Actions - Notes
-  const addNote = (title: string, content: string) => {
-    const newNote: Note = {
-      id: Date.now().toString(),
-      title: title || 'Untitled Note',
-      content,
-      lastModified: new Date().toLocaleDateString(),
-      tags: [],
-      flashcards: []
-    };
-    setNotes([newNote, ...notes]);
-  };
-
-  const updateNote = (id: string, updates: Partial<Note>) => {
-    setNotes(prev => prev.map(n => n.id === id ? { ...n, ...updates, lastModified: new Date().toLocaleDateString() } : n));
-  };
-
-  const deleteNote = (id: string) => {
-    setNotes(prev => prev.filter(n => n.id !== id));
   };
 
   return (
     <AppContext.Provider value={{
-      user, setUser, updateUserProfile,
+      user, setUser, updateUserProfile, isLoading, isDataLoading,
       subjects, addSubject, updateAttendance, updateSubjectStats, deleteSubject,
       tasks, addTask, updateTask, deleteTask, toggleTaskCompletion, cycleTaskPriority,
       schedule, addScheduleItem, updateScheduleItem, deleteScheduleItem, generateSmartSchedule, isGeneratingSchedule,
@@ -420,7 +455,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       notifications, markNotificationRead, clearNotifications,
       budgetLimit, setBudgetLimit, habits, addHabit, toggleHabit, deleteHabit,
       savingsGoals, addSavingsGoal, updateSavingsGoal, deleteSavingsGoal,
-      notes, addNote, updateNote, deleteNote, awardXP
+      expenses, addExpense, deleteExpense,
+      notes, addNote, updateNote, deleteNote, awardXP,
+      dashboardWidgets, updateDashboardWidgets
     }}>
       {children}
     </AppContext.Provider>

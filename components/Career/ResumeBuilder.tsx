@@ -1,382 +1,441 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Briefcase, Sparkles, Award, MessageSquare, Mic, Map, Target, ChevronRight, CheckCircle, Send, Star, FileText, Check, AlertTriangle, Search, Building, MapPin } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Upload, FileText, CheckCircle, AlertTriangle, RefreshCw, 
+  Briefcase, Search, ChevronRight, MessageSquare, Mic, 
+  StopCircle, Play, Sparkles, BarChart3, TrendingUp, Send,
+  Target, Award
+} from 'lucide-react';
 import { Card } from '../Shared/Card';
 import { Button } from '../Shared/Button';
-import { analyzeResume, generateInterviewQuestion, evaluateInterviewAnswer, generateCareerRoadmap } from '../../services/gemini';
-import { motion, AnimatePresence } from 'framer-motion';
-import ReactMarkdown from 'react-markdown';
-import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
+import { analyzeResume, generateJobMatches, generateInterviewQuestion, evaluateInterviewAnswer, generateInterviewReport } from '../../services/gemini';
+import { useAppContext } from '../../context/AppContext';
 
-// --- Sub-Component: Resume Enhancement ---
-const ResumeEnhancer = () => {
-  const [skills, setSkills] = useState('');
-  const [experience, setExperience] = useState('');
-  const [analysis, setAnalysis] = useState<{score: number, feedback: string[], keywords: string[]} | null>(null);
-  const [loading, setLoading] = useState(false);
+const InterviewReport = ({ report, onRestart }: { report: any, onRestart: () => void }) => {
+    const safeReport = report || {};
+    const verdict = safeReport.verdict || "Pending";
+    const overallScore = safeReport.overallScore || 0;
+    const technicalScore = safeReport.technicalScore || 0;
+    const communicationScore = safeReport.communicationScore || 0;
+    const strengths = safeReport.strengths || [];
+    const improvements = safeReport.improvements || [];
+    const summary = safeReport.summary || "No summary available.";
 
-  const handleGenerate = async () => {
-    if (!skills || !experience) return;
-    setLoading(true);
-    const skillList = skills.split(',').map(s => s.trim());
-    const result = await analyzeResume(skillList, experience);
-    setAnalysis(result);
-    setLoading(false);
-  };
+    // Helper to safely check hire status
+    const isHire = typeof verdict === 'string' && verdict?.includes("Hire");
 
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-      <div className="lg:col-span-5 space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Technical Skills</label>
-          <input
-            value={skills}
-            onChange={(e) => setSkills(e.target.value)}
-            placeholder="React, Python, AWS..."
-            className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-4 py-3 focus:ring-2 focus:ring-primary-500/20 outline-none dark:text-white"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Experience Summary</label>
-          <textarea
-            value={experience}
-            onChange={(e) => setExperience(e.target.value)}
-            placeholder="Built a web app for college..."
-            className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-4 py-3 h-32 resize-none focus:ring-2 focus:ring-primary-500/20 outline-none dark:text-white"
-          />
-        </div>
-        <Button
-          onClick={handleGenerate}
-          disabled={loading || !skills || !experience}
-          className="w-full"
-          icon={loading ? <Sparkles className="animate-spin" size={18} /> : <FileText size={18} />}
+    return (
+        <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex flex-col h-full bg-slate-50 dark:bg-slate-900 overflow-y-auto custom-scrollbar p-6 rounded-2xl"
         >
-          Analyze Resume
-        </Button>
-      </div>
+            <div className="text-center mb-8">
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 rounded-full text-xs font-bold mb-4">
+                    <Sparkles size={14} /> Interview Analysis
+                </div>
+                <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Performance Report</h2>
+                <p className="text-slate-500 text-sm">Here's how you performed in your mock session.</p>
+            </div>
 
-      <div className="lg:col-span-7 bg-slate-50 dark:bg-slate-900/50 rounded-xl p-6 border border-slate-100 dark:border-slate-800 min-h-[300px]">
-        {analysis ? (
-           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="flex items-center gap-6">
-                  <div className="relative w-32 h-32">
-                     <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                           <Pie
-                              data={[{ value: analysis.score }, { value: 100 - analysis.score }]}
-                              innerRadius={25}
-                              outerRadius={40}
-                              startAngle={180}
-                              endAngle={-180}
-                              dataKey="value"
-                              stroke="none"
-                           >
-                              <Cell fill={analysis.score > 70 ? '#10b981' : '#f59e0b'} />
-                              <Cell fill="#e2e8f0" />
-                           </Pie>
-                        </PieChart>
-                     </ResponsiveContainer>
-                     <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-2xl font-bold text-slate-800 dark:text-white">{analysis.score}</span>
-                        <span className="text-[10px] uppercase text-slate-400">ATS Score</span>
-                     </div>
-                  </div>
-                  <div className="flex-1">
-                      <h4 className="font-bold text-lg mb-2">Resume Health</h4>
-                      <p className="text-sm text-slate-600 dark:text-slate-400">
-                          {analysis.score > 80 ? "Your resume is in great shape! Ready for top tier companies." : "Needs improvement to pass automated filters."}
-                      </p>
-                  </div>
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                {/* Overall Score */}
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center relative overflow-hidden">
+                    <div className="relative w-32 h-32 flex items-center justify-center">
+                        <svg className="w-full h-full -rotate-90">
+                            <circle cx="64" cy="64" r="56" fill="none" stroke="currentColor" strokeWidth="10" className="text-slate-100 dark:text-slate-700" />
+                            <motion.circle 
+                                cx="64" cy="64" r="56" fill="none" stroke="currentColor" strokeWidth="10" 
+                                className={overallScore > 75 ? "text-emerald-500" : overallScore > 50 ? "text-amber-500" : "text-rose-500"}
+                                strokeDasharray={351}
+                                strokeDashoffset={351}
+                                animate={{ strokeDashoffset: 351 - (351 * overallScore) / 100 }}
+                                transition={{ duration: 1.5, ease: "easeOut" }}
+                                strokeLinecap="round"
+                            />
+                        </svg>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <span className="text-3xl font-bold text-slate-800 dark:text-white">{overallScore}</span>
+                            <span className="text-[10px] uppercase text-slate-400 font-bold">Overall</span>
+                        </div>
+                    </div>
+                    <div className={`mt-4 px-3 py-1 rounded-lg text-xs font-bold ${
+                        isHire ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+                    }`}>
+                        {verdict}
+                    </div>
+                </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
-                      <h5 className="font-semibold text-sm mb-3 text-emerald-600 flex items-center gap-2"><Check size={14}/> Key Strengths</h5>
-                      <div className="flex flex-wrap gap-2">
-                          {analysis.keywords.map((k, i) => (
-                              <span key={i} className="text-xs bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 py-1 rounded-full">{k}</span>
-                          ))}
-                      </div>
-                  </div>
-                  <div className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
-                      <h5 className="font-semibold text-sm mb-3 text-amber-600 flex items-center gap-2"><AlertTriangle size={14}/> Improvements</h5>
-                      <ul className="space-y-2">
-                          {analysis.feedback.map((f, i) => (
-                              <li key={i} className="text-xs text-slate-600 dark:text-slate-300 list-disc ml-3">{f}</li>
-                          ))}
-                      </ul>
-                  </div>
-              </div>
-           </div>
-        ) : (
-          <div className="h-full flex flex-col items-center justify-center text-slate-400 text-sm text-center">
-             <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-4">
-                 <Target size={32} className="opacity-30" />
-             </div>
-             <p>Enter your details to generate an ATS compatibility score and get tailored feedback.</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+                {/* Metrics Breakdown */}
+                <div className="md:col-span-2 grid grid-cols-1 gap-4">
+                    <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-center gap-4">
+                        <div className="p-3 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-xl">
+                            <BarChart3 size={24} />
+                        </div>
+                        <div className="flex-1">
+                            <div className="flex justify-between mb-1">
+                                <span className="font-semibold text-slate-700 dark:text-slate-200">Technical Accuracy</span>
+                                <span className="font-bold text-slate-900 dark:text-white">{technicalScore}/100</span>
+                            </div>
+                            <div className="h-2 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                                <motion.div 
+                                    initial={{ width: 0 }}
+                                    animate={{ width: `${technicalScore}%` }}
+                                    className="h-full bg-blue-500"
+                                    transition={{ duration: 1, delay: 0.5 }}
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-center gap-4">
+                        <div className="p-3 bg-purple-100 dark:bg-purple-900/30 text-purple-600 rounded-xl">
+                            <MessageSquare size={24} />
+                        </div>
+                        <div className="flex-1">
+                            <div className="flex justify-between mb-1">
+                                <span className="font-semibold text-slate-700 dark:text-slate-200">Communication</span>
+                                <span className="font-bold text-slate-900 dark:text-white">{communicationScore}/100</span>
+                            </div>
+                            <div className="h-2 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                                <motion.div 
+                                    initial={{ width: 0 }}
+                                    animate={{ width: `${communicationScore}%` }}
+                                    className="h-full bg-purple-500"
+                                    transition={{ duration: 1, delay: 0.7 }}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 mb-6">
+                <h4 className="font-bold text-slate-900 dark:text-white mb-4">Executive Summary</h4>
+                <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                    {summary}
+                </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
+                    <h4 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                        <CheckCircle className="text-emerald-500" size={18} /> Top Strengths
+                    </h4>
+                    <ul className="space-y-2">
+                        {strengths.map((s: string, i: number) => (
+                            <li key={i} className="text-sm text-slate-600 dark:text-slate-300 flex items-start gap-2">
+                                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full mt-1.5 shrink-0"></span>
+                                {s}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
+                    <h4 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                        <TrendingUp className="text-amber-500" size={18} /> Growth Areas
+                    </h4>
+                    <ul className="space-y-2">
+                        {improvements.map((s: string, i: number) => (
+                            <li key={i} className="text-sm text-slate-600 dark:text-slate-300 flex items-start gap-2">
+                                <span className="w-1.5 h-1.5 bg-amber-500 rounded-full mt-1.5 shrink-0"></span>
+                                {s}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            </div>
+
+            <div className="mt-auto">
+                <Button onClick={onRestart} className="w-full py-3">Start New Interview</Button>
+            </div>
+        </motion.div>
+    );
 };
 
-// --- Sub-Component: Mock Interview ---
-const MockInterview = () => {
-  const [role, setRole] = useState('Software Engineer');
-  const [started, setStarted] = useState(false);
-  const [history, setHistory] = useState<{role: 'ai' | 'user', text: string, feedback?: string, rating?: number}[]>([]);
-  const [currentAnswer, setCurrentAnswer] = useState('');
-  const [loading, setLoading] = useState(false);
-  const chatEndRef = useRef<HTMLDivElement>(null);
+export const ResumeBuilder: React.FC = () => {
+  const { user } = useAppContext();
+  const [activeTab, setActiveTab] = useState<'resume' | 'jobs' | 'interview'>('resume');
+  
+  // Resume State
+  const [resumeText, setResumeText] = useState('');
+  const [analysis, setAnalysis] = useState<any>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [history]);
+  // Job State
+  const [targetRole, setTargetRole] = useState('Software Engineer');
+  const [jobs, setJobs] = useState<any[]>([]);
+  const [isSearchingJobs, setIsSearchingJobs] = useState(false);
+
+  // Interview State
+  const [interviewStarted, setInterviewStarted] = useState(false);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [currentAnswer, setCurrentAnswer] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [interviewReport, setInterviewReport] = useState<any>(null);
+  const [turnCount, setTurnCount] = useState(0);
+
+  const handleAnalyzeResume = async () => {
+    setIsAnalyzing(true);
+    // Simulate skills extraction from text for now, or use user profile
+    const skills = user?.skills || ['React', 'TypeScript'];
+    const result = await analyzeResume(skills, resumeText || "Student with some projects");
+    setAnalysis(result);
+    setIsAnalyzing(false);
+  };
+
+  const handleFindJobs = async () => {
+    setIsSearchingJobs(true);
+    const skills = user?.skills || [];
+    const result = await generateJobMatches(targetRole, skills);
+    setJobs(result);
+    setIsSearchingJobs(false);
+  };
 
   const startInterview = async () => {
-    setLoading(true);
-    setStarted(true);
-    const q = await generateInterviewQuestion(role);
-    setHistory([{ role: 'ai', text: q }]);
-    setLoading(false);
+    setInterviewStarted(true);
+    setMessages([]);
+    setTurnCount(0);
+    setInterviewReport(null);
+    setIsProcessing(true);
+    const q = await generateInterviewQuestion(targetRole, 'General');
+    setMessages([{ role: 'ai', text: q }]);
+    setIsProcessing(false);
   };
 
   const submitAnswer = async () => {
     if (!currentAnswer.trim()) return;
     
-    const userAns = currentAnswer;
-    const lastQuestion = history[history.length - 1].text;
-    
-    // Optimistic Update
-    setHistory(prev => [...prev, { role: 'user', text: userAns }]);
+    const newHistory = [...messages, { role: 'user', text: currentAnswer }];
+    setMessages(newHistory);
     setCurrentAnswer('');
-    setLoading(true);
+    setIsProcessing(true);
 
-    const evalResult = await evaluateInterviewAnswer(lastQuestion, userAns);
+    const lastQuestion = messages[messages.length - 1].text;
+    const evaluation = await evaluateInterviewAnswer(lastQuestion, currentAnswer);
     
-    // Add feedback then next question
-    setHistory(prev => {
-        const newHist = [...prev];
-        // Attach feedback to user's last message
-        const lastUserMsgIndex = newHist.length - 1;
-        newHist[lastUserMsgIndex] = { ...newHist[lastUserMsgIndex], feedback: evalResult.feedback, rating: evalResult.rating };
-        return [...newHist, { role: 'ai', text: evalResult.nextQuestion }];
-    });
-    setLoading(false);
+    const aiResponse = { 
+        role: 'ai', 
+        text: evaluation.nextQuestion, 
+        feedback: evaluation.feedback,
+        rating: evaluation.rating 
+    };
+
+    setMessages([...newHistory, aiResponse]);
+    setTurnCount(prev => prev + 1);
+    setIsProcessing(false);
+  };
+
+  const finishInterview = async () => {
+      setIsProcessing(true);
+      const report = await generateInterviewReport(messages);
+      setInterviewReport(report);
+      setIsProcessing(false);
   };
 
   return (
-    <div className="h-[500px] flex flex-col">
-      {!started ? (
-        <div className="flex-1 flex flex-col items-center justify-center space-y-6">
-          <div className="w-20 h-20 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center">
-             <Mic size={40} className="text-primary-600 dark:text-primary-400" />
-          </div>
-          <div className="text-center">
-            <h3 className="text-xl font-bold text-slate-800 dark:text-white">AI Mock Interview</h3>
-            <p className="text-slate-500 mt-2 max-w-md">Practice behavioral and technical questions in a safe environment. Get instant feedback on your answers.</p>
-          </div>
-          <div className="flex gap-2 w-full max-w-xs">
-            <input 
-              value={role} 
-              onChange={e => setRole(e.target.value)} 
-              className="flex-1 px-4 py-2 border rounded-lg dark:bg-slate-900 dark:border-slate-800 dark:text-white"
-              placeholder="Target Role (e.g. PM)"
-            />
-            <Button onClick={startInterview}>Start</Button>
-          </div>
-        </div>
-      ) : (
-        <>
-          <div className="flex-1 overflow-y-auto space-y-4 p-4 bg-slate-50 dark:bg-slate-950/50 rounded-xl mb-4 border border-slate-100 dark:border-slate-800">
-            {history.map((msg, i) => (
-              <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                <div className={`max-w-[85%] p-4 rounded-2xl ${msg.role === 'ai' ? 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-tl-none' : 'bg-primary-600 text-white rounded-tr-none'}`}>
-                   <p className="text-sm">{msg.text}</p>
-                </div>
-                {msg.feedback && (
-                  <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mt-2 max-w-[85%] bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 p-3 rounded-lg">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-bold text-yellow-700 dark:text-yellow-500 uppercase">Feedback</span>
-                      <div className="flex items-center gap-0.5">
-                         <Star size={10} className="fill-yellow-500 text-yellow-500" />
-                         <span className="text-xs font-bold text-yellow-700 dark:text-yellow-500">{msg.rating}/10</span>
-                      </div>
-                    </div>
-                    <p className="text-xs text-yellow-800 dark:text-yellow-200/80 leading-relaxed">{msg.feedback}</p>
-                  </motion.div>
-                )}
-              </div>
-            ))}
-            {loading && <div className="text-xs text-slate-400 animate-pulse pl-2">AI is thinking...</div>}
-            <div ref={chatEndRef} />
-          </div>
-          <div className="flex gap-2">
-            <input 
-              value={currentAnswer}
-              onChange={e => setCurrentAnswer(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && submitAnswer()}
-              className="flex-1 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-primary-500/20 outline-none dark:text-white"
-              placeholder="Type your answer..."
-            />
-            <Button onClick={submitAnswer} disabled={loading || !currentAnswer} icon={<Send size={18} />} />
-          </div>
-        </>
-      )}
-    </div>
-  );
-};
-
-// --- Sub-Component: Career Roadmap ---
-const CareerRoadmap = () => {
-  const [role, setRole] = useState('');
-  const [roadmap, setRoadmap] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  const generate = async () => {
-    if (!role) return;
-    setLoading(true);
-    const result = await generateCareerRoadmap(role);
-    setRoadmap(result);
-    setLoading(false);
-  };
-
-  return (
-    <div className="space-y-8">
-       <div className="flex gap-4 items-end">
-          <div className="flex-1">
-             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Dream Job Role</label>
-             <input 
-               value={role}
-               onChange={e => setRole(e.target.value)}
-               placeholder="e.g. Full Stack Developer, Data Scientist"
-               className="w-full px-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white"
-             />
-          </div>
-          <Button onClick={generate} disabled={loading || !role} className="mb-[1px]" icon={loading ? <Sparkles className="animate-spin" /> : <Map />}>
-             Generate Path
-          </Button>
-       </div>
-
-       <div className="relative border-l-2 border-slate-200 dark:border-slate-800 ml-4 space-y-8 py-2">
-          {roadmap.length === 0 && !loading && (
-             <div className="pl-8 text-slate-400 text-sm">Enter a role to visualize your path to success.</div>
-          )}
-          {roadmap.map((step, i) => (
-             <motion.div 
-               key={i}
-               initial={{ opacity: 0, x: -20 }}
-               animate={{ opacity: 1, x: 0 }}
-               transition={{ delay: i * 0.1 }}
-               className="relative pl-8"
-             >
-                <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-white dark:bg-slate-900 border-2 border-primary-500 shadow-[0_0_0_4px_rgba(255,255,255,1)] dark:shadow-[0_0_0_4px_rgba(15,23,42,1)]"></div>
-                
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-xl shadow-sm hover:shadow-md transition-shadow">
-                   <div className="flex justify-between items-start mb-2">
-                      <h4 className="font-bold text-slate-800 dark:text-white text-lg">Step {step.step}: {step.title}</h4>
-                      <span className="text-xs font-mono bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-slate-600 dark:text-slate-400">{step.duration}</span>
-                   </div>
-                   <p className="text-sm text-slate-600 dark:text-slate-400">{step.topics}</p>
-                </div>
-             </motion.div>
-          ))}
-       </div>
-    </div>
-  );
-};
-
-// --- Sub-Component: Job Match ---
-const JobMatch = () => {
-    // Simulated Data
-    const jobs = [
-        { role: "Junior Frontend Dev", company: "TechCorp", match: 85, skills: ["React", "TS"] },
-        { role: "Backend Engineer", company: "DataSystems", match: 60, skills: ["Node", "SQL"] },
-        { role: "Product Intern", company: "StartUp Inc", match: 92, skills: ["Communication", "Agile"] },
-    ];
-
-    return (
-        <div className="space-y-6">
-            <div className="flex justify-between items-center">
-                <h3 className="font-bold text-lg">Matched Opportunities</h3>
-                <div className="flex gap-2 text-sm text-slate-500">
-                    <span className="flex items-center gap-1"><MapPin size={14}/> Remote / Hybrid</span>
-                </div>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {jobs.map((job, i) => (
-                    <motion.div 
-                      key={i}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.1 }}
-                      className="border border-slate-200 dark:border-slate-800 rounded-xl p-4 hover:border-primary-500 cursor-pointer transition-colors bg-white dark:bg-slate-900"
-                    >
-                        <div className="flex justify-between items-start mb-3">
-                            <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center">
-                                <Building size={20} className="text-slate-500"/>
-                            </div>
-                            <span className="text-xs font-bold bg-green-100 text-green-700 px-2 py-1 rounded-full">{job.match}% Match</span>
-                        </div>
-                        <h4 className="font-bold text-slate-800 dark:text-white">{job.role}</h4>
-                        <p className="text-sm text-slate-500 mb-4">{job.company}</p>
-                        <div className="flex gap-2 flex-wrap">
-                            {job.skills.map(s => <span key={s} className="text-[10px] bg-slate-50 dark:bg-slate-800 px-2 py-1 rounded text-slate-600 dark:text-slate-400">{s}</span>)}
-                        </div>
-                    </motion.div>
-                ))}
-            </div>
-        </div>
-    )
-}
-
-// --- Main Component ---
-export const ResumeBuilder: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'resume' | 'interview' | 'roadmap' | 'jobs'>('resume');
-
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Career Center</h1>
-         <div className="flex bg-slate-100 dark:bg-slate-800/50 p-1 rounded-xl overflow-x-auto">
-            {(['resume', 'interview', 'roadmap', 'jobs'] as const).map(tab => (
-               <button
-                 key={tab}
-                 onClick={() => setActiveTab(tab)}
-                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
-                    activeTab === tab 
-                    ? 'bg-white dark:bg-slate-800 text-primary-600 dark:text-primary-400 shadow-sm' 
-                    : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
-                 }`}
-               >
-                 {tab === 'resume' && 'Resume ATS'}
-                 {tab === 'interview' && 'Mock Interview'}
-                 {tab === 'roadmap' && 'Roadmap'}
-                 {tab === 'jobs' && 'Job Match'}
-               </button>
-            ))}
-         </div>
+    <div className="h-[calc(100dvh-120px)] flex flex-col gap-6">
+      {/* Tabs */}
+      <div className="flex bg-white dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 w-fit">
+         {[
+            { id: 'resume', label: 'Resume Check', icon: FileText },
+            { id: 'jobs', label: 'Job Match', icon: Briefcase },
+            { id: 'interview', label: 'Mock Interview', icon: Mic },
+         ].map(tab => (
+            <button
+               key={tab.id}
+               onClick={() => setActiveTab(tab.id as any)}
+               className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                  activeTab === tab.id 
+                  ? 'bg-primary-600 text-white shadow-lg shadow-primary-500/20' 
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+               }`}
+            >
+               <tab.icon size={16} /> {tab.label}
+            </button>
+         ))}
       </div>
 
-      <Card noPadding>
-         <div className="p-6">
-            <AnimatePresence mode="wait">
-               <motion.div
-                 key={activeTab}
-                 initial={{ opacity: 0, y: 10 }}
-                 animate={{ opacity: 1, y: 0 }}
-                 exit={{ opacity: 0, y: -10 }}
-                 transition={{ duration: 0.2 }}
-               >
-                  {activeTab === 'resume' && <ResumeEnhancer />}
-                  {activeTab === 'interview' && <MockInterview />}
-                  {activeTab === 'roadmap' && <CareerRoadmap />}
-                  {activeTab === 'jobs' && <JobMatch />}
-               </motion.div>
-            </AnimatePresence>
-         </div>
-      </Card>
+      <div className="flex-1 min-h-0">
+          {activeTab === 'resume' && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
+                  <Card title="Resume Input" className="flex flex-col">
+                      <textarea 
+                         value={resumeText}
+                         onChange={e => setResumeText(e.target.value)}
+                         placeholder="Paste your resume summary or experience here..."
+                         className="flex-1 w-full p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl resize-none outline-none focus:ring-2 focus:ring-primary-500/20 text-sm"
+                      />
+                      <div className="mt-4 flex justify-end">
+                          <Button onClick={handleAnalyzeResume} isLoading={isAnalyzing} icon={<Search size={16}/>}>Analyze</Button>
+                      </div>
+                  </Card>
+                  <div className="h-full overflow-y-auto custom-scrollbar">
+                      {analysis ? (
+                          <div className="space-y-6">
+                              <Card>
+                                  <div className="flex items-center justify-between mb-6">
+                                      <h3 className="text-lg font-bold">ATS Score</h3>
+                                      <div className={`text-3xl font-black ${analysis.score >= 80 ? 'text-emerald-500' : 'text-amber-500'}`}>{analysis.score}/100</div>
+                                  </div>
+                                  <div className="w-full bg-slate-100 dark:bg-slate-800 h-3 rounded-full overflow-hidden">
+                                      <motion.div 
+                                        initial={{ width: 0 }} 
+                                        animate={{ width: `${analysis.score}%` }} 
+                                        className={`h-full ${analysis.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                                      />
+                                  </div>
+                              </Card>
+                              <Card title="Feedback">
+                                  <ul className="space-y-3">
+                                      {analysis.feedback.map((item: string, i: number) => (
+                                          <li key={i} className="flex gap-3 text-sm text-slate-600 dark:text-slate-300">
+                                              <AlertTriangle size={16} className="text-amber-500 shrink-0 mt-0.5" />
+                                              {item}
+                                          </li>
+                                      ))}
+                                  </ul>
+                              </Card>
+                              <Card title="Missing Keywords">
+                                  <div className="flex flex-wrap gap-2">
+                                      {analysis.keywords.map((kw: string, i: number) => (
+                                          <span key={i} className="px-3 py-1 bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 text-xs font-bold rounded-lg border border-rose-100 dark:border-rose-900/30">{kw}</span>
+                                      ))}
+                                  </div>
+                              </Card>
+                          </div>
+                      ) : (
+                          <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                              <FileText size={48} className="opacity-20 mb-4" />
+                              <p>Paste your resume to get AI feedback</p>
+                          </div>
+                      )}
+                  </div>
+              </div>
+          )}
+
+          {activeTab === 'jobs' && (
+             <div className="h-full flex flex-col gap-6">
+                 <Card>
+                     <div className="flex gap-4">
+                         <div className="flex-1">
+                             <label className="text-xs font-bold text-slate-500 uppercase">Target Role</label>
+                             <input 
+                                value={targetRole}
+                                onChange={e => setTargetRole(e.target.value)}
+                                className="w-full mt-1 px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl outline-none"
+                             />
+                         </div>
+                         <div className="flex items-end">
+                             <Button onClick={handleFindJobs} isLoading={isSearchingJobs} icon={<Briefcase size={18}/>}>Find Matches</Button>
+                         </div>
+                     </div>
+                 </Card>
+                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto custom-scrollbar pb-4">
+                     {jobs.map((job, i) => (
+                         <motion.div 
+                           key={i}
+                           initial={{ opacity: 0, y: 20 }}
+                           animate={{ opacity: 1, y: 0 }}
+                           transition={{ delay: i * 0.1 }}
+                         >
+                             <Card className="h-full flex flex-col">
+                                 <div className="flex justify-between items-start mb-4">
+                                     <div>
+                                         <h3 className="font-bold text-lg">{job.role}</h3>
+                                         <p className="text-slate-500 text-sm">{job.company}</p>
+                                     </div>
+                                     <div className={`px-2 py-1 rounded-lg text-xs font-bold ${
+                                         job.match >= 85 ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'
+                                     }`}>
+                                         {job.match}% Match
+                                     </div>
+                                 </div>
+                                 <div className="flex flex-wrap gap-2 mt-auto">
+                                     {job.skills.slice(0, 3).map((s: string, j: number) => (
+                                         <span key={j} className="text-[10px] bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-slate-600 dark:text-slate-400">{s}</span>
+                                     ))}
+                                     {job.skills.length > 3 && <span className="text-[10px] text-slate-400 self-center">+{job.skills.length - 3} more</span>}
+                                 </div>
+                             </Card>
+                         </motion.div>
+                     ))}
+                 </div>
+             </div>
+          )}
+
+          {activeTab === 'interview' && (
+             <div className="h-full">
+                 {!interviewStarted ? (
+                     <div className="h-full flex flex-col items-center justify-center text-center max-w-lg mx-auto">
+                         <div className="w-24 h-24 bg-indigo-100 dark:bg-indigo-900/30 rounded-full flex items-center justify-center mb-6">
+                             <Mic size={40} className="text-indigo-600 dark:text-indigo-400" />
+                         </div>
+                         <h2 className="text-2xl font-bold mb-3">AI Mock Interview</h2>
+                         <p className="text-slate-500 mb-8">Practice behavioral and technical questions tailored to {targetRole}. Get real-time feedback.</p>
+                         <Button size="lg" onClick={startInterview} icon={<Play size={20} />}>Start Session</Button>
+                     </div>
+                 ) : interviewReport ? (
+                    <InterviewReport report={interviewReport} onRestart={startInterview} />
+                 ) : (
+                     <div className="h-full flex flex-col gap-4">
+                         <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-800 custom-scrollbar">
+                             {messages.map((msg, i) => (
+                                 <motion.div 
+                                    key={i} 
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
+                                 >
+                                     <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'ai' ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                                         {msg.role === 'ai' ? <Sparkles size={14}/> : <Briefcase size={14}/>}
+                                     </div>
+                                     <div className={`max-w-[80%] p-4 rounded-2xl ${
+                                         msg.role === 'ai' 
+                                         ? 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-tl-none' 
+                                         : 'bg-indigo-600 text-white rounded-tr-none'
+                                     }`}>
+                                         <p className="text-sm leading-relaxed">{msg.text}</p>
+                                         {msg.feedback && (
+                                             <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700">
+                                                 <div className="flex items-center gap-2 text-xs font-bold text-emerald-600 dark:text-emerald-400 mb-1">
+                                                     <CheckCircle size={12} /> Feedback (Rating: {msg.rating}/10)
+                                                 </div>
+                                                 <p className="text-xs opacity-80 italic">{msg.feedback}</p>
+                                             </div>
+                                         )}
+                                     </div>
+                                 </motion.div>
+                             ))}
+                             {isProcessing && (
+                                 <div className="flex items-center gap-2 text-slate-400 text-sm pl-12">
+                                     <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"/>
+                                     <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce delay-100"/>
+                                     <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce delay-200"/>
+                                 </div>
+                             )}
+                         </div>
+
+                         <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl flex gap-3">
+                             <input 
+                                value={currentAnswer}
+                                onChange={e => setCurrentAnswer(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && submitAnswer()}
+                                placeholder="Type your answer..."
+                                className="flex-1 bg-transparent outline-none"
+                                disabled={isProcessing}
+                             />
+                             {turnCount >= 3 ? (
+                                 <Button variant="danger" onClick={finishInterview} icon={<StopCircle size={18}/>}>Finish</Button>
+                             ) : (
+                                 <Button onClick={submitAnswer} disabled={!currentAnswer || isProcessing} icon={<Send size={18}/>}>Send</Button>
+                             )}
+                         </div>
+                     </div>
+                 )}
+             </div>
+          )}
+      </div>
     </div>
   );
 };

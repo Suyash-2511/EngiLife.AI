@@ -1,496 +1,286 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  ChevronRight, ArrowRight, Lock, Mail, User, 
-  ScanFace, Github, Chrome, Check, ShieldCheck, GraduationCap, AlertCircle, Smartphone 
-} from 'lucide-react';
+import { Mail, Lock, ArrowRight, Github, Chrome, Loader2, AlertCircle, User } from 'lucide-react';
+import { api } from '../../services/api';
+import { Logo } from '../Shared/Logo';
+
+// --- Helper: Compact Syntax Terminal ---
+const SystemBootFeed = () => {
+    const [lines, setLines] = useState<string[]>([]);
+    const feed = [
+        "> [BOOT] ENGILIFE_OS v4.0.1",
+        "> [AUTH] ENCRYPTION_LAYER: AES-512",
+        "> [SYNC] CAMPUS_MESH_NODE_07... OK",
+        "> [DATA] RECOVERING_SESSION... SUCCESS",
+        "> [KERN] NEURAL_ADAPTOR LOADED [78ms]",
+        "> [INFO] ALL_SYSTEMS_OPERATIONAL"
+    ];
+
+    useEffect(() => {
+        let i = 0;
+        const interval = setInterval(() => {
+            if (i < feed.length) {
+                setLines(prev => [...prev, feed[i]].slice(-4));
+                i++;
+            } else {
+                i = 0;
+                setLines([]);
+            }
+        }, 2000);
+        return () => clearInterval(interval);
+    }, []);
+
+    const getColor = (line: string) => {
+        if (line?.includes('[BOOT]')) return 'text-primary-400';
+        if (line?.includes('OK') || line?.includes('SUCCESS')) return 'text-emerald-400';
+        return 'text-slate-500';
+    };
+
+    return (
+        <div className="font-mono text-[9px] leading-relaxed select-none bg-black/40 p-3 rounded-xl border border-white/5 shadow-inner backdrop-blur-sm max-w-xs">
+            {lines.map((line, idx) => (
+                <motion.div initial={{ opacity: 0, x: -5 }} animate={{ opacity: 1, x: 0 }} key={line + idx} className={`flex gap-2 ${getColor(line)}`}>
+                    <span className="opacity-20 shrink-0">{(idx + 1).toString().padStart(2, '0')}</span>
+                    <span className="truncate">{line}</span>
+                </motion.div>
+            ))}
+            <div className="animate-pulse inline-block w-1.5 h-2.5 bg-primary-500/40 ml-1 mt-0.5" />
+        </div>
+    );
+};
 
 interface LoginProps {
   onLogin: (user: any) => void;
 }
 
-// --- Helper: Password Strength Meter ---
-const PasswordStrengthMeter = ({ password }: { password: string }) => {
-  const getStrength = (pass: string) => {
-    let score = 0;
-    if (pass.length > 5) score++;
-    if (pass.length > 8) score++;
-    if (/[A-Z]/.test(pass)) score++;
-    if (/[0-9]/.test(pass)) score++;
-    if (/[^A-Za-z0-9]/.test(pass)) score++;
-    return score; // Max 5
-  };
-
-  const strength = getStrength(password);
-  const colors = ['bg-slate-200', 'bg-red-500', 'bg-orange-500', 'bg-yellow-500', 'bg-emerald-500', 'bg-primary-600'];
-  const labels = ['', 'Weak', 'Fair', 'Good', 'Strong', 'Secure'];
-
-  if (!password) return null;
-
-  return (
-    <div className="space-y-1 mt-2">
-      <div className="flex gap-1 h-1">
-        {[1, 2, 3, 4, 5].map((level) => (
-          <div 
-            key={level} 
-            className={`h-full flex-1 rounded-full transition-colors duration-300 ${strength >= level ? colors[strength] : 'bg-slate-100 dark:bg-slate-800'}`} 
-          />
-        ))}
-      </div>
-      <p className={`text-[10px] font-medium text-right ${strength < 3 ? 'text-red-500' : 'text-emerald-500'}`}>
-        {labels[strength]}
-      </p>
-    </div>
-  );
-};
-
-// --- Helper: Face ID Scanner Animation ---
-const FaceIDScanner = ({ onComplete }: { onComplete: () => void }) => {
-  const [status, setStatus] = useState<'scanning' | 'success'>('scanning');
-
-  useEffect(() => {
-    const timer = setTimeout(() => setStatus('success'), 2000);
-    const complete = setTimeout(onComplete, 3000);
-    return () => { clearTimeout(timer); clearTimeout(complete); };
-  }, [onComplete]);
-
-  return (
-    <div className="flex flex-col items-center justify-center py-8">
-      <div className="relative w-32 h-32">
-        {/* Scanner Box */}
-        <svg className="absolute inset-0 w-full h-full text-primary-500" viewBox="0 0 100 100">
-          <path d="M10,30 V10 H30" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-          <path d="M70,10 H90 V30" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-          <path d="M10,70 V90 H30" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-          <path d="M90,70 V90 H70" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-        </svg>
-
-        {/* Dynamic Content */}
-        <AnimatePresence mode="wait">
-          {status === 'scanning' ? (
-            <motion.div 
-              key="scan"
-              initial={{ opacity: 0 }} 
-              animate={{ opacity: 1 }} 
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 flex items-center justify-center"
-            >
-              <ScanFace size={64} className="text-primary-400 opacity-50" />
-              <motion.div 
-                className="absolute w-full h-1 bg-primary-400 shadow-[0_0_15px_rgba(139,92,246,0.8)]"
-                animate={{ top: ['10%', '90%', '10%'] }}
-                transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
-              />
-            </motion.div>
-          ) : (
-            <motion.div 
-              key="success"
-              initial={{ scale: 0.5, opacity: 0 }} 
-              animate={{ scale: 1, opacity: 1 }}
-              className="absolute inset-0 flex items-center justify-center bg-emerald-500/10 rounded-2xl"
-            >
-              <div className="bg-emerald-500 rounded-full p-2 shadow-lg shadow-emerald-500/30">
-                <Check size={48} className="text-white" strokeWidth={3} />
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-      <p className="mt-6 text-sm font-medium tracking-wider uppercase text-slate-500 animate-pulse">
-        {status === 'scanning' ? 'Verifying Biometrics...' : 'Identity Confirmed'}
-      </p>
-    </div>
-  );
-};
-
 export const Login: React.FC<LoginProps> = ({ onLogin }) => {
-  const [mode, setMode] = useState<'login' | 'signup' | 'faceid' | 'otp'>('login');
+  const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [branch, setBranch] = useState('Computer Science');
-  const [otp, setOtp] = useState(['', '', '', '']);
-  const [enable2FA, setEnable2FA] = useState(false);
   const [loading, setLoading] = useState(false);
-  
-  // Security State
-  const [failedAttempts, setFailedAttempts] = useState(0);
-  const [isLocked, setIsLocked] = useState(false);
-  const [lockoutTimer, setLockoutTimer] = useState(0);
-  const [errorMsg, setErrorMsg] = useState('');
+  const [error, setError] = useState('');
+  const [verificationRequired, setVerificationRequired] = useState(false);
+  const [otp, setOtp] = useState('');
 
-  // Lockout Logic
-  useEffect(() => {
-    let timer: any;
-    if (isLocked && lockoutTimer > 0) {
-      timer = setInterval(() => setLockoutTimer(prev => prev - 1), 1000);
-    } else if (lockoutTimer === 0 && isLocked) {
-      setIsLocked(false);
-      setFailedAttempts(0);
-      setErrorMsg('');
-    }
-    return () => clearInterval(timer);
-  }, [isLocked, lockoutTimer]);
-
-  const validateEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
-
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isLocked) return;
-
-    if (!validateEmail(email)) {
-      setErrorMsg("Invalid email format.");
-      return;
-    }
-
-    if (password.length < 6) {
-      handleFailedAttempt("Incorrect password.");
-      return;
-    }
-
-    // Simulate checks
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      // Determine if OTP is needed. For demo, check if user "enabled" it in signup, 
-      // OR arbitrarily enforce it for the demo user if they check "Secure Login"
-      if (enable2FA) { // Reusing this state for "Is 2FA Required for this user" assumption
-        setMode('otp');
+    setError('');
+
+    try {
+      if (verificationRequired) {
+        const { user, token } = await api.auth.verifyEmail(email, otp);
+        localStorage.setItem('auth_token', token);
+        onLogin(user);
       } else {
-        completeLogin();
+        if (isLogin) {
+          const { user, token, verificationRequired: needsVerify } = await api.auth.login(email, password);
+          if (needsVerify) {
+            setVerificationRequired(true);
+            setLoading(false);
+            return;
+          }
+          if (token && user) {
+            localStorage.setItem('auth_token', token);
+            onLogin(user);
+          }
+        } else {
+          // Signup
+          const { user, verificationRequired: needsVerify } = await api.auth.signup(name, email, 'Computer Science', password);
+          if (needsVerify) {
+             setVerificationRequired(true);
+             setLoading(false);
+          } else {
+             // Direct login if no verify needed (unlikely based on API but handling it)
+             setIsLogin(true);
+          }
+        }
       }
-    }, 1000);
-  };
-
-  const handleSignupSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validateEmail(email) || !name || password.length < 6) {
-      setErrorMsg("Please fill all fields correctly. Password must be 6+ chars.");
-      return;
-    }
-    setLoading(true);
-    setTimeout(() => {
+    } catch (err: any) {
+      setError(err.message || "Authentication failed");
+    } finally {
       setLoading(false);
-      completeLogin();
-    }, 1500);
-  };
-
-  const handleFailedAttempt = (msg: string) => {
-    const attempts = failedAttempts + 1;
-    setFailedAttempts(attempts);
-    if (attempts >= 3) {
-      setIsLocked(true);
-      setLockoutTimer(30); // 30 seconds
-      setErrorMsg("Too many failed attempts. Account locked.");
-    } else {
-      setErrorMsg(`${msg} Attempts left: ${3 - attempts}`);
     }
   };
 
-  const handleOtpChange = (index: number, value: string) => {
-    if (value.length > 1) return;
-    const newOtp = [...otp];
-    newOtp[index] = value;
-    setOtp(newOtp);
-    
-    // Auto-focus next
-    if (value && index < 3) {
-      document.getElementById(`otp-${index+1}`)?.focus();
-    }
-  };
-
-  const verifyOtp = () => {
-    setLoading(true);
-    setTimeout(() => {
-      if (otp.join('') === '1234') {
-        completeLogin();
-      } else {
-        setLoading(false);
-        setErrorMsg("Invalid code. Try 1234.");
-        setOtp(['','','','']);
-        document.getElementById(`otp-0`)?.focus();
+  const handleSocialLogin = async (provider: string) => {
+      // Simulate social login for demo
+      setLoading(true);
+      try {
+          const mockSocialUser = {
+              provider,
+              email: `demo.${provider}@example.com`,
+              name: `Demo ${provider} User`,
+              avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${provider}`
+          };
+          const { user, token } = await api.auth.socialLogin(provider, mockSocialUser.email, mockSocialUser.name, mockSocialUser.avatar);
+          localStorage.setItem('auth_token', token);
+          onLogin(user);
+      } catch (e) {
+          setError("Social login failed");
+      } finally {
+          setLoading(false);
       }
-    }, 1000);
-  };
-
-  const completeLogin = () => {
-    onLogin({ 
-      name: name || 'Engineering Student', 
-      email,
-      branch,
-      security: { twoFactorEnabled: enable2FA, lastLogin: new Date().toISOString() }
-    });
-  };
-
-  const startFaceID = () => {
-    setMode('faceid');
   };
 
   return (
-    <div className="min-h-screen w-full flex bg-transparent">
-      {/* Visual Side (Left) - Glass Panel */}
-      <div className="hidden lg:flex w-1/2 relative overflow-hidden items-center justify-center p-12">
-        <div className="relative z-20 max-w-lg text-slate-800 dark:text-white">
+    <div className="relative min-h-screen flex flex-col items-center justify-center p-4 overflow-y-auto">
+       <div className="w-full max-w-md relative z-10 py-10">
+          <div className="text-center mb-8">
+             <div className="inline-block mb-4">
+                <Logo size="lg" />
+             </div>
+             <h1 className="text-3xl font-black text-white tracking-tighter mb-2">
+               {isLogin ? 'WELCOME BACK' : 'INITIALIZE PROTOCOL'}
+             </h1>
+             <p className="text-slate-400 text-sm">
+               {isLogin ? 'Enter credentials to access neural link.' : 'Create your digital signature.'}
+             </p>
+          </div>
+
           <motion.div 
-            initial={{ opacity: 0, y: 20 }} 
-            animate={{ opacity: 1, y: 0 }} 
-            transition={{ delay: 0.2 }}
-            className="bg-white/30 dark:bg-slate-900/40 backdrop-blur-xl p-10 rounded-3xl border border-white/20 shadow-2xl"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-slate-900/50 backdrop-blur-xl border border-white/10 p-8 rounded-3xl shadow-2xl relative overflow-hidden"
           >
-            <div className="w-14 h-14 bg-gradient-to-tr from-primary-500 to-indigo-500 rounded-2xl flex items-center justify-center mb-8 shadow-glow ring-1 ring-white/20 backdrop-blur-md">
-              <span className="text-3xl font-bold font-mono text-white">E</span>
-            </div>
-            <h1 className="text-5xl font-bold mb-6 tracking-tight leading-tight">
-              The OS for <br/>
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-600 to-indigo-500 dark:from-primary-400 dark:to-indigo-300">Future Engineers.</span>
-            </h1>
-            <p className="text-slate-600 dark:text-slate-300 text-lg leading-relaxed mb-8">
-              Seamlessly integrate your academic, financial, and career goals into one intelligent ecosystem.
-            </p>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-white/40 dark:bg-white/5 backdrop-blur-md border border-white/20 dark:border-white/10 rounded-2xl p-5 hover:bg-white/50 dark:hover:bg-white/10 transition-colors">
-                <ShieldCheck className="text-emerald-500 dark:text-emerald-400 mb-2" size={24} />
-                <span className="text-2xl font-bold block mb-1">Secure</span>
-                <span className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider">End-to-End Encrypted</span>
-              </div>
-              <div className="bg-white/40 dark:bg-white/5 backdrop-blur-md border border-white/20 dark:border-white/10 rounded-2xl p-5 hover:bg-white/50 dark:hover:bg-white/10 transition-colors">
-                <GraduationCap className="text-primary-600 dark:text-primary-400 mb-2" size={24} />
-                <span className="text-2xl font-bold block mb-1">Smart</span>
-                <span className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider">AI-Powered Tutor</span>
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      </div>
-
-      {/* Form Side (Right) - Glass Panel */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 relative">
-        <div className="w-full max-w-md bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl p-8 rounded-3xl border border-white/40 dark:border-slate-800 shadow-2xl">
-          <AnimatePresence mode="wait">
-            {mode === 'faceid' ? (
-              <motion.div 
-                key="faceid"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className="text-center"
-              >
-                <FaceIDScanner onComplete={() => onLogin({ name: 'Alex Johnson', email: 'alex@engilife.edu' })} />
-                <button 
-                  onClick={() => setMode('login')}
-                  className="mt-8 text-sm text-slate-500 hover:text-primary-600 underline"
-                >
-                  Cancel and use password
-                </button>
-              </motion.div>
-            ) : mode === 'otp' ? (
-              <motion.div 
-                key="otp"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                className="text-center"
-              >
-                <div className="w-16 h-16 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center mx-auto mb-6 text-primary-600">
-                   <Smartphone size={32} />
+             {/* Decorative Elements */}
+             <div className="absolute top-0 right-0 w-32 h-32 bg-primary-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+             
+             {/* Tabs for Login/Register */}
+             {!verificationRequired && (
+                <div className="flex bg-black/20 p-1 rounded-xl mb-6 border border-white/5 relative">
+                    <motion.div 
+                        className="absolute top-1 bottom-1 w-[calc(50%-4px)] bg-white/10 rounded-lg shadow-sm"
+                        animate={{ x: isLogin ? 4 : '100%' }}
+                        initial={false}
+                        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                    />
+                    <button 
+                        onClick={() => setIsLogin(true)} 
+                        className={`flex-1 py-2.5 text-xs font-bold uppercase tracking-widest rounded-lg transition-colors relative z-10 ${isLogin ? 'text-white' : 'text-slate-500 hover:text-slate-400'}`}
+                    >
+                        Login
+                    </button>
+                    <button 
+                        onClick={() => setIsLogin(false)} 
+                        className={`flex-1 py-2.5 text-xs font-bold uppercase tracking-widest rounded-lg transition-colors relative z-10 ${!isLogin ? 'text-white' : 'text-slate-500 hover:text-slate-400'}`}
+                    >
+                        Register
+                    </button>
                 </div>
-                <h3 className="text-2xl font-bold mb-2 text-slate-900 dark:text-white">Two-Factor Auth</h3>
-                <p className="text-slate-500 mb-8 text-sm">Enter the code sent to your email (Demo: 1234)</p>
-                
-                <div className="flex justify-center gap-3 mb-8">
-                   {otp.map((digit, i) => (
-                      <input 
-                        key={i}
-                        id={`otp-${i}`}
-                        type="text" 
-                        maxLength={1}
-                        value={digit}
-                        onChange={(e) => handleOtpChange(i, e.target.value)}
-                        className="w-12 h-12 text-center text-xl font-bold border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 focus:ring-2 focus:ring-primary-500/50 outline-none dark:text-white"
-                      />
-                   ))}
+             )}
+
+             {error && (
+                <div className="mb-6 p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center gap-3 text-rose-400 text-sm">
+                   <AlertCircle size={16} /> {error}
                 </div>
-                
-                {errorMsg && <p className="text-red-500 text-sm mb-4 animate-shake">{errorMsg}</p>}
+             )}
 
-                <button 
-                   onClick={verifyOtp}
-                   disabled={loading || otp.join('').length !== 4}
-                   className="w-full py-3.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition-all disabled:opacity-50"
-                >
-                   {loading ? "Verifying..." : "Verify Login"}
-                </button>
-                <button onClick={() => setMode('login')} className="mt-4 text-sm text-slate-500 hover:text-slate-700">Back to Login</button>
-              </motion.div>
-            ) : (
-              <motion.div
-                key="form"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                transition={{ duration: 0.3 }}
-              >
-                <div className="text-center lg:text-left mb-8">
-                  <h2 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
-                    {mode === 'login' ? 'Welcome Back' : 'Join EngiLife'}
-                  </h2>
-                  <p className="mt-2 text-slate-600 dark:text-slate-400">
-                    {mode === 'login' ? 'Enter your credentials to access your dashboard.' : 'Start your engineering journey today.'}
-                  </p>
-                </div>
-
-                {isLocked ? (
-                   <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 rounded-xl flex items-center gap-3 text-red-600 dark:text-red-400 mb-6">
-                      <AlertCircle size={24} />
-                      <div>
-                         <p className="font-bold">Account Locked</p>
-                         <p className="text-sm">Try again in {lockoutTimer}s</p>
-                      </div>
-                   </div>
-                ) : (
-                  <>
-                    {/* Social Login */}
-                    <div className="grid grid-cols-2 gap-3 mb-8">
-                      <button className="flex items-center justify-center gap-2 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors dark:text-white shadow-sm">
-                        <Chrome size={20} className="text-slate-900 dark:text-white" /> 
-                        <span className="text-sm font-medium">Google</span>
-                      </button>
-                      <button className="flex items-center justify-center gap-2 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors dark:text-white shadow-sm">
-                        <Github size={20} className="text-slate-900 dark:text-white" /> 
-                        <span className="text-sm font-medium">GitHub</span>
-                      </button>
-                    </div>
-
-                    <div className="relative flex items-center gap-4 mb-8">
-                      <div className="h-px bg-slate-200 dark:bg-slate-700 flex-1"></div>
-                      <span className="text-xs text-slate-400 uppercase font-medium">Or continue with</span>
-                      <div className="h-px bg-slate-200 dark:bg-slate-700 flex-1"></div>
-                    </div>
-
-                    {errorMsg && <p className="text-red-500 text-xs text-center mb-4 font-medium">{errorMsg}</p>}
-
-                    <form onSubmit={mode === 'login' ? handleLoginSubmit : handleSignupSubmit} className="space-y-5">
-                      {mode === 'signup' && (
-                        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="space-y-5">
-                          <div className="relative group">
-                            <User className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-primary-500 transition-colors" size={20} />
-                            <input
-                              type="text"
-                              required
-                              value={name}
-                              onChange={(e) => setName(e.target.value)}
-                              placeholder="Full Name"
-                              className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-all dark:text-white shadow-sm"
+             <form onSubmit={handleSubmit} className="space-y-4 relative z-10">
+                <AnimatePresence mode="wait">
+                   {verificationRequired ? (
+                      <motion.div 
+                        key="otp"
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        className="space-y-4"
+                      >
+                         <div className="text-center mb-4">
+                            <p className="text-emerald-400 font-mono text-xs uppercase tracking-widest mb-2">Verification Code Sent</p>
+                            <p className="text-slate-400 text-xs">Check your email for the OTP.</p>
+                         </div>
+                         <div className="relative group">
+                            <input 
+                              type="text" 
+                              value={otp}
+                              onChange={e => setOtp(e.target.value)}
+                              placeholder="000000"
+                              className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-center text-2xl font-mono tracking-[0.5em] text-white outline-none focus:border-emerald-500/50 transition-colors placeholder:text-slate-700"
                             />
-                          </div>
-                          <div className="relative group">
-                            <GraduationCap className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-primary-500 transition-colors" size={20} />
-                            <select
-                              value={branch}
-                              onChange={(e) => setBranch(e.target.value)}
-                              className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-all dark:text-white appearance-none shadow-sm"
-                            >
-                              <option>Computer Science</option>
-                              <option>Mechanical Engineering</option>
-                              <option>Electrical Engineering</option>
-                              <option>Civil Engineering</option>
-                            </select>
-                            <ChevronRight className="absolute right-3 top-3.5 text-slate-400 pointer-events-none rotate-90" size={16} />
-                          </div>
-                        </motion.div>
-                      )}
-                      
-                      <div className="relative group">
-                        <Mail className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-primary-500 transition-colors" size={20} />
-                        <input
-                          type="email"
-                          required
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          placeholder="Student Email"
-                          className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-all dark:text-white shadow-sm"
-                        />
-                      </div>
+                         </div>
+                      </motion.div>
+                   ) : (
+                      <motion.div 
+                         key="auth-form"
+                         initial={{ opacity: 0, x: 20 }}
+                         animate={{ opacity: 1, x: 0 }}
+                         exit={{ opacity: 0, x: -20 }}
+                         className="space-y-4"
+                      >
+                         {!isLogin && (
+                           <div className="relative group">
+                              <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-primary-400 transition-colors" size={18} />
+                              <input 
+                                type="text" 
+                                value={name}
+                                onChange={e => setName(e.target.value)}
+                                placeholder="Full Name"
+                                className="w-full bg-black/20 border border-white/10 rounded-xl px-10 py-3 text-white outline-none focus:border-primary-500/50 transition-colors placeholder:text-slate-500"
+                              />
+                           </div>
+                         )}
+                         <div className="relative group">
+                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-primary-400 transition-colors" size={18} />
+                            <input 
+                              type="email" 
+                              value={email}
+                              onChange={e => setEmail(e.target.value)}
+                              placeholder="Email Address"
+                              className="w-full bg-black/20 border border-white/10 rounded-xl px-10 py-3 text-white outline-none focus:border-primary-500/50 transition-colors placeholder:text-slate-500"
+                            />
+                         </div>
+                         <div className="relative group">
+                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-primary-400 transition-colors" size={18} />
+                            <input 
+                              type="password" 
+                              value={password}
+                              onChange={e => setPassword(e.target.value)}
+                              placeholder="Password"
+                              className="w-full bg-black/20 border border-white/10 rounded-xl px-10 py-3 text-white outline-none focus:border-primary-500/50 transition-colors placeholder:text-slate-500"
+                            />
+                         </div>
+                      </motion.div>
+                   )}
+                </AnimatePresence>
 
-                      <div className="space-y-1">
-                        <div className="relative group">
-                          <Lock className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-primary-500 transition-colors" size={20} />
-                          <input
-                            type="password"
-                            required
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            placeholder="Password"
-                            className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-all dark:text-white shadow-sm"
-                          />
-                        </div>
-                        {mode === 'signup' && <PasswordStrengthMeter password={password} />}
-                      </div>
+                <button 
+                  type="submit" 
+                  disabled={loading}
+                  className="w-full bg-gradient-to-r from-primary-600 to-indigo-600 hover:from-primary-500 hover:to-indigo-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-primary-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2 mt-6"
+                >
+                   {loading ? <Loader2 className="animate-spin" /> : (
+                      <>
+                        {verificationRequired ? 'Verify & Access' : (isLogin ? 'Access System' : 'Create Account')} <ArrowRight size={18} />
+                      </>
+                   )}
+                </button>
+             </form>
 
-                      <div className="flex justify-between items-center text-sm">
-                        <label className="flex items-center gap-2 cursor-pointer text-slate-600 dark:text-slate-400 select-none">
-                          <input 
-                            type="checkbox" 
-                            className="rounded border-slate-300 text-primary-600 focus:ring-primary-500" 
-                            checked={enable2FA}
-                            onChange={e => setEnable2FA(e.target.checked)}
-                          />
-                          {mode === 'login' ? 'Secure Login (2FA)' : 'Enable 2-Factor Auth'}
-                        </label>
-                        {mode === 'login' && <button type="button" className="text-primary-600 hover:text-primary-700 font-medium">Forgot Password?</button>}
-                      </div>
+             {!verificationRequired && (
+                <>
+                   <div className="my-6 flex items-center gap-4">
+                      <div className="h-px bg-white/5 flex-1" />
+                      <span className="text-[10px] uppercase text-slate-500 font-bold tracking-widest">Or connect with</span>
+                      <div className="h-px bg-white/5 flex-1" />
+                   </div>
 
-                      <div className="pt-2 space-y-3">
-                        <button
-                          type="submit"
-                          disabled={loading}
-                          className="w-full py-3.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-bold shadow-lg shadow-primary-500/25 flex items-center justify-center gap-2 transition-all disabled:opacity-70 disabled:cursor-not-allowed group active:scale-[0.98]"
-                        >
-                          {loading ? (
-                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                          ) : (
-                            <>
-                              {mode === 'login' ? 'Sign In' : 'Create Account'}
-                              <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
-                            </>
-                          )}
-                        </button>
-                        
-                        {mode === 'login' && (
-                          <button
-                            type="button"
-                            onClick={startFaceID}
-                            className="w-full py-3.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center gap-2 transition-all"
-                          >
-                            <ScanFace size={20} /> Login with Face ID
-                          </button>
-                        )}
-                      </div>
-                    </form>
+                   <div className="grid grid-cols-2 gap-4">
+                      <button onClick={() => handleSocialLogin('Google')} className="bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl py-2.5 flex items-center justify-center gap-2 transition-colors">
+                         <Chrome size={18} className="text-white" /> <span className="text-xs font-bold text-white">Google</span>
+                      </button>
+                      <button onClick={() => handleSocialLogin('GitHub')} className="bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl py-2.5 flex items-center justify-center gap-2 transition-colors">
+                         <Github size={18} className="text-white" /> <span className="text-xs font-bold text-white">GitHub</span>
+                      </button>
+                   </div>
+                </>
+             )}
+          </motion.div>
 
-                    <div className="text-center mt-6">
-                      <p className="text-sm text-slate-600 dark:text-slate-400">
-                        {mode === 'login' ? "Don't have an account?" : "Already have an account?"}
-                        <button 
-                          onClick={() => {
-                             setMode(mode === 'login' ? 'signup' : 'login');
-                             setErrorMsg('');
-                             setEnable2FA(false);
-                          }}
-                          className="ml-2 font-semibold text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 transition-colors"
-                        >
-                          {mode === 'login' ? 'Sign up' : 'Log in'}
-                        </button>
-                      </p>
-                    </div>
-                  </>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      </div>
+          <div className="mt-8 flex justify-center">
+             <SystemBootFeed />
+          </div>
+       </div>
     </div>
   );
 };

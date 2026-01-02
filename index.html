@@ -1,10 +1,14 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>EngiLife - Student Ecosystem</title>
+    <title>EngiLife-AI</title>
+    <!-- Updated Favicon: "Neural Hex" Design -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' fill='none'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='100' y2='100' gradientUnits='userSpaceOnUse'%3E%3Cstop offset='0%25' stop-color='%23f97316'/%3E%3Cstop offset='50%25' stop-color='%23f43f5e'/%3E%3Cstop offset='100%25' stop-color='%236366f1'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M50 5 L92 28 V72 L50 95 L8 72 V28 Z' stroke='url(%23g)' stroke-width='8' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M50 50 L50 20 M50 50 L76 65 M50 50 L24 65' stroke='url(%23g)' stroke-width='8' stroke-linecap='round'/%3E%3Ccircle cx='50' cy='50' r='10' fill='url(%23g)'/%3E%3Ccircle cx='50' cy='50' r='4' fill='white'/%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <script>
       tailwind.config = {
@@ -17,45 +21,52 @@
             },
             colors: {
               slate: {
-                850: '#1e293b',
-                900: '#0f172a',
-                950: '#020617',
+                850: '#1f1b2e', // Purple-tinted slate
+                900: '#13111c',
+                950: '#0a090f',
               },
-              // Primary: Violet
+              // Primary: Solar (Orange/Rose/Indigo)
               primary: {
-                50: '#f5f3ff',
-                100: '#ede9fe',
-                200: '#ddd6fe',
-                300: '#c4b5fd',
-                400: '#a78bfa',
-                500: '#8b5cf6',
-                600: '#7c3aed', // Main Brand Color
-                700: '#6d28d9',
-                800: '#5b21b6',
-                900: '#4c1d95',
+                50: '#fff7ed',
+                100: '#ffedd5',
+                200: '#fed7aa',
+                300: '#fdba74',
+                400: '#fb923c',
+                500: '#f97316', // Orange-500
+                600: '#ea580c', // Orange-600
+                700: '#c2410c',
+                800: '#9a3412',
+                900: '#7c2d12',
               },
-              // Secondary: Emerald
-              emerald: {
-                50: '#ecfdf5',
-                100: '#d1fae5',
-                400: '#34d399',
-                500: '#10b981',
-                600: '#059669',
+              // Secondary Accents
+              rose: {
+                500: '#f43f5e',
+                600: '#e11d48',
+              },
+              indigo: {
+                500: '#6366f1',
+                600: '#4f46e5',
               }
             },
             boxShadow: {
-              'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.07)',
-              'glow': '0 0 20px -5px rgba(124, 58, 237, 0.5)', // Violet glow
+              'glass': '0 8px 32px 0 rgba(249, 115, 22, 0.1)', // Orange tint
+              'glass-dark': '0 8px 32px 0 rgba(0, 0, 0, 0.4)',
+              'glow': '0 0 20px -5px rgba(249, 115, 22, 0.5)', 
             },
             animation: {
               'pulse-slow': 'pulse 8s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-              'float': 'float 20s ease-in-out infinite',
-              'float-delayed': 'float 25s ease-in-out infinite reverse',
+              'float': 'float 10s ease-in-out infinite',
+              'float-delayed': 'float 12s ease-in-out infinite reverse',
+              'gradient-x': 'gradient-x 15s ease infinite',
             },
             keyframes: {
               float: {
-                '0%, 100%': { transform: 'translate(0, 0)' },
-                '50%': { transform: 'translate(20px, -20px)' },
+                '0%, 100%': { transform: 'translate(0, 0) rotate(0deg)' },
+                '50%': { transform: 'translate(15px, -15px) rotate(3deg)' },
+              },
+              'gradient-x': {
+                '0%, 100%': { 'background-position': '0% 50%' },
+                '50%': { 'background-position': '100% 50%' },
               }
             }
           },
@@ -65,47 +76,54 @@
     <style>
       body {
         font-family: 'Inter', sans-serif;
-        background-color: #f8fafc;
-        color: #0f172a;
+        background-color: #fffaf5; /* Warm white */
+        color: #1c1917;
         overflow-x: hidden;
-        transition: background-color 0.3s ease, color 0.3s ease;
+        transition: background-color 0.5s ease, color 0.3s ease;
       }
       
       html.dark body {
-        background-color: #0f172a;
-        color: #f8fafc;
+        background-color: #0a090f; /* Deep dark */
+        color: #fafaf9;
       }
 
-      /* Scrollbar Styling */
       ::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
+        width: 8px;
+        height: 8px;
       }
       ::-webkit-scrollbar-track {
         background: transparent;
       }
       ::-webkit-scrollbar-thumb {
-        background: #cbd5e1;
+        background: rgba(249, 115, 22, 0.3);
         border-radius: 10px;
       }
       html.dark ::-webkit-scrollbar-thumb {
-        background: #334155;
+        background: rgba(251, 146, 60, 0.2);
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8;
+        background: rgba(249, 115, 22, 0.6);
       }
       
-      /* Glassmorphism Utilities */
       .glass-panel {
         background: rgba(255, 255, 255, 0.7);
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
         border: 1px solid rgba(255, 255, 255, 0.5);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
       }
       
       html.dark .glass-panel {
-        background: rgba(15, 23, 42, 0.6);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(19, 17, 28, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+      }
+
+      .text-gradient {
+        background: linear-gradient(135deg, #f97316 0%, #e11d48 50%, #6366f1 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
       }
     </style>
   <script type="importmap">
@@ -113,6 +131,7 @@
   "imports": {
     "react": "https://aistudiocdn.com/react@^19.2.1",
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
+    "react-dom/client": "https://aistudiocdn.com/react-dom@^19.2.1/client",
     "react/": "https://aistudiocdn.com/react@^19.2.1/",
     "@google/genai": "https://aistudiocdn.com/@google/genai@^1.32.0",
     "lucide-react": "https://aistudiocdn.com/lucide-react@^0.556.0",
@@ -121,7 +140,16 @@
     "react-markdown": "https://aistudiocdn.com/react-markdown@^10.1.0",
     "framer-motion": "https://aistudiocdn.com/framer-motion@^11.13.1",
     "clsx": "https://aistudiocdn.com/clsx@^2.1.1",
-    "tailwind-merge": "https://aistudiocdn.com/tailwind-merge@^2.5.5"
+    "tailwind-merge": "https://aistudiocdn.com/tailwind-merge@^2.5.5",
+    "express": "https://esm.sh/express@^5.2.1",
+    "@prisma/client": "https://esm.sh/@prisma/client@^7.1.0",
+    "bcryptjs": "https://esm.sh/bcryptjs@^3.0.3",
+    "morgan": "https://esm.sh/morgan@^1.10.1",
+    "jsonwebtoken": "https://esm.sh/jsonwebtoken@^9.0.3",
+    "cors": "https://esm.sh/cors@^2.8.5",
+    "helmet": "https://esm.sh/helmet@^8.1.0",
+    "vite": "https://esm.sh/vite@^7.3.0",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"
   }
 }
 </script>
